@@ -1,0 +1,39 @@
+name: Validation
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ "*" ]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v2
+      with:
+        python-version: "3.10"
+    - name: Set up Poetry 1.1.12
+      uses: abatilo/actions-poetry@v2.0.0
+      with:
+        poetry-version: "1.1.12"
+    - name: Install dependencies
+      run: |
+        poetry install
+    - name: Check typing with mypy
+      run: |
+        poetry run mypy --python-version 3.8 .
+    - name: Check style with flake8
+      run: |
+        poetry run flake8
+    - name: Check formatting with black
+      run: |
+        poetry run black --check .
+    - name: Check import ordering with isort
+      run: |
+        poetry run isort --check .

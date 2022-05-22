@@ -1,0 +1,27 @@
+name: PR standards
+
+on:
+  pull_request:
+    types: [opened, synchronize, edited, reopened]
+    branches: [ main ]
+
+jobs:
+  pr:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    strategy:
+      fail-fast: false
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Fetch origin/main
+      run: git remote set-branches origin main && git fetch -v
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v2
+      with:
+        python-version: "3.10"
+    - name: Install python libs
+      run: pip install gql[aiohttp] packaging toml
+    - name: Check pyproject.toml version
+      run: python .github/scripts/check-version-change.py ${{ secrets.GITHUB_TOKEN }}
