@@ -11,6 +11,8 @@ For instance, if you have a local repository with a main branch, your main branc
 
 Not all git configuration is taken into account; please open an issue if this causes problems.
 
+[![Validation status page](https://github.com/alicederyn/git-sync/actions/workflows/validation.yml/badge.svg?branch=main)](https://github.com/alicederyn/git-sync/actions/workflows/validation.yml?query=branch%3Amain)
+
 
 Installing
 ----------
