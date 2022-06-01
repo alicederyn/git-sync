@@ -70,4 +70,4 @@ def main() -> None:
     else:
         check_call(["git", "fetch", "--all"])
     fast_forward_to_upstream(b for b in branches if b.name != current_branch)
-    fast_forward_to_downstream(b for b in branches if b.name != current_branch)
+    fast_forward_to_downstream(branches)
