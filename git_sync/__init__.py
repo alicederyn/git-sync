@@ -21,7 +21,9 @@ def get_default_push_remote() -> Optional[bytes]:
 
 
 def branches_with_remote_upstreams() -> List[Branch]:
-    raw_bytes = check_output(["git", "branch", "--format=%(refname) %(upstream)"])
+    raw_bytes = check_output(
+        ["git", "for-each-ref", "--format=%(refname) %(upstream)", "refs/heads"]
+    )
     return [
         Branch(name=name, upstream=upstream)
         for name, upstream in (line.split(b" ") for line in raw_bytes.splitlines())
@@ -31,7 +33,7 @@ def branches_with_remote_upstreams() -> List[Branch]:
 
 def get_remote_branches(remote: bytes) -> List[bytes]:
     return check_output(
-        ["git", "branch", "--list", "-r", remote + b"/*", "--format=%(refname)"]
+        ["git", "for-each-ref", "--format=%(refname)", b"refs/remotes/" + remote]
     ).splitlines()
 
 
