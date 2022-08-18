@@ -27,7 +27,7 @@ To install, use [pipx]:
 
 ```bash
 pip install pipx
-export PATH="$PATH:$HOME/.local/bin"
+python -m pipx ensurepath  # Permanently updates your $PATH
 pipx install git+https://github.com/alicederyn/git-sync.git
 ```
 
