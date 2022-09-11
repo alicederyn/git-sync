@@ -1,4 +1,5 @@
 import sys
+from asyncio import run
 from subprocess import CalledProcessError
 
 from .git import (
@@ -8,7 +9,7 @@ from .git import (
 )
 
 
-def main() -> None:
+async def git_sync() -> None:
     try:
         branches = get_branches_with_remote_upstreams()
     except CalledProcessError as e:
@@ -17,3 +18,7 @@ def main() -> None:
         sys.exit(e.returncode)
     fetch_and_fast_forward_to_upstream(branches)
     fast_forward_to_downstream(branches)
+
+
+def main() -> None:
+    run(git_sync())
