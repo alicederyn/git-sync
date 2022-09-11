@@ -1,6 +1,8 @@
 from asyncio.subprocess import PIPE, create_subprocess_exec
 from dataclasses import dataclass
-from typing import Iterable, List, Optional, Union
+from typing import Dict, Iterable, List, Optional, Union
+
+from .github import PullRequest
 
 _ExecArg = Union[bytes, str]
 
@@ -52,6 +54,16 @@ async def get_default_push_remote() -> Optional[bytes]:
     return raw_bytes or None
 
 
+async def get_branch_hashes() -> Dict[bytes, str]:
+    raw_bytes = await git_output(
+        "for-each-ref", "--format=%(refname) %(objectname)", "refs/heads"
+    )
+    return {
+        ref[11:]: hash.decode("ascii")
+        for (ref, hash) in (line.split(b" ") for line in raw_bytes.splitlines())
+    }
+
+
 async def get_branches_with_remote_upstreams() -> List[Branch]:
     current_branch = await get_current_branch()
     raw_bytes = await git_output(
@@ -64,11 +76,46 @@ async def get_branches_with_remote_upstreams() -> List[Branch]:
     ]
 
 
+@dataclass
+class Remote:
+    name: bytes
+    url: str
+
+
+async def get_remotes() -> List[Remote]:
+    raw_bytes = await git_output(
+        "config", "--get-regexp", r"remote\..*\.url", check_return=False
+    )
+    return [
+        Remote(name=name[7:-4], url=url.decode("ascii"))
+        for (name, url) in (line.split(b" ") for line in raw_bytes.splitlines())
+    ]
+
+
 async def get_remote_branches(remote: bytes) -> List[bytes]:
     raw_bytes = await git_output(
         "for-each-ref", "--format=%(refname)", b"refs/remotes/" + remote
     )
     return raw_bytes.splitlines()
+
+
+async def is_ancestor(commit1: _ExecArg, commit2: _ExecArg) -> bool:
+    """Return true if commit1 is an ancestor of commit2
+
+    For instance, 2d406492de55 is merge #11 and 8ee9b133bb73 #12:
+    >>> from asyncio import run
+    >>> run(is_ancestor("2d406492de55", "8ee9b133bb73"))
+    True
+    >>> run(is_ancestor("8ee9b133bb73", "2d406492de55"))
+    False
+    """
+    try:
+        await git("merge-base", "--is-ancestor", commit1, commit2)
+        return True
+    except GitError as e:
+        if e.returncode == 1:
+            return False
+        raise
 
 
 async def fetch_and_fast_forward_to_upstream(branches: Iterable[Branch]) -> None:
@@ -84,10 +131,9 @@ async def fetch_and_fast_forward_to_upstream(branches: Iterable[Branch]) -> None
         await git("fetch", ".", *fetch_args, check_return=False)
 
 
-async def fast_forward_to_downstream(branches: Iterable[Branch]) -> None:
-    push_remote = await get_default_push_remote()
-    if not push_remote:
-        return
+async def fast_forward_to_downstream(
+    push_remote: bytes, branches: Iterable[Branch]
+) -> None:
     remote_branches = set(await get_remote_branches(push_remote))
     for b in branches:
         # All branches start with refs/heads/
@@ -95,3 +141,31 @@ async def fast_forward_to_downstream(branches: Iterable[Branch]) -> None:
         remote = b"refs/remotes/" + push_remote + b"/" + short_branch_name
         if remote in remote_branches and b.upstream != remote:
             await git("push", push_remote, short_branch_name)
+
+
+async def fast_forward_merged_prs(
+    push_remote_url: str, prs: Iterable[PullRequest]
+) -> None:
+    current_branch = await get_current_branch()
+    current_branch = current_branch and current_branch[11:]
+    branch_hashes = await get_branch_hashes()
+    for pr in prs:
+        branch_name = pr.branch_name.encode("utf-8")
+        merged_hash = pr.merged_hash
+        if (
+            merged_hash
+            and branch_name in branch_hashes
+            and merged_hash != branch_hashes[branch_name]
+            and push_remote_url in pr.repo_urls
+        ):
+            try:
+                branch_is_ancestor = await is_ancestor(branch_name, pr.branch_name)
+            except GitError:
+                pass  # Probably no longer have the commit hash
+            else:
+                if branch_is_ancestor:
+                    print(f"Fast-forward {pr.branch_name} to {pr.merged_hash}")
+                    if branch_name == current_branch:
+                        await git("reset", "--hard", merged_hash)
+                    else:
+                        await git("branch", "--force", branch_name, merged_hash)
