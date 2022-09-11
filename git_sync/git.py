@@ -38,7 +38,11 @@ def get_remote_branches(remote: bytes) -> List[bytes]:
     ).splitlines()
 
 
-def fast_forward_to_upstream(branches: Iterable[Branch]) -> None:
+def fetch_and_fast_forward_to_upstream(branches: Iterable[Branch]) -> None:
+    if any(b.is_current for b in branches):
+        check_call(["git", "pull", "--all"])
+    else:
+        check_call(["git", "fetch", "--all"])
     fetch_args = [b.upstream + b":" + b.name for b in branches]
     if fetch_args:
         # Use run rather than check_call as fetch will exit with a non-zero code
