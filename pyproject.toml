@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "git-sync"
-version = "0.1.2"
+version = "0.2.0"
 description = "Synchronize local git repo with remotes"
 authors = ["Alice Purcell <Alice.Purcell.39@gmail.com>"]
 
@@ -9,6 +9,7 @@ git-sync = "git_sync:main"
 
 [tool.poetry.dependencies]
 python = "^3.8"
+aiographql-client = "^1.0.3"
 
 [tool.poetry.dev-dependencies]
 black = "^22.3.0"
@@ -22,6 +23,9 @@ profile = "black"
 
 [tool.mypy]
 strict = true
+
+[tool.pytest.ini_options]
+addopts = "--doctest-modules"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

@@ -1,0 +1,152 @@
+import re
+from asyncio import Semaphore, gather
+from dataclasses import dataclass
+from typing import (
+    AsyncIterator,
+    Callable,
+    Dict,
+    FrozenSet,
+    Iterable,
+    List,
+    Optional,
+    TypeVar,
+)
+
+from aiographql.client import GraphQLClient  # type: ignore
+
+T = TypeVar("T")
+
+
+@dataclass(frozen=True)
+class Repository:
+    domain: str
+    owner: str
+    name: str
+
+
+HTTPS_URL = re.compile(r"^https://([^/]*)/([^/]*)/([^/]*)\.git$")
+GIT_URL = re.compile(r"^git@([^:]*):([^/]*)/([^/]*)\.git$")
+
+
+def parse_repo_url(url: str) -> Optional[Repository]:
+    """Parse a GitHub repository URL
+
+    >>> parse_repo_url("https://github.com/alicederyn/git-sync.git")
+    Repository(domain='github.com', owner='alicederyn', name='git-sync')
+    >>> parse_repo_url("git@github.com:alicederyn/git-graph-branch.git")
+    Repository(domain='github.com', owner='alicederyn', name='git-graph-branch')
+    """
+    m = HTTPS_URL.match(url)
+    if m:
+        return Repository(*m.groups())
+    m = GIT_URL.match(url)
+    if m:
+        return Repository(*m.groups())
+    return None
+
+
+def repos_by_domain(urls: Iterable[str]) -> Dict[str, List[Repository]]:
+    result: Dict[str, List[Repository]] = {}
+    for url in urls:
+        repo = parse_repo_url(url)
+        if repo:
+            result.setdefault(repo.domain, []).append(repo)
+    return result
+
+
+@dataclass(frozen=True)
+class PullRequest:
+    branch_name: str
+    repo_urls: FrozenSet[str]
+    branch_hash: str
+    merged_hash: Optional[str]
+
+
+def gql_query(owner: str, name: str) -> str:
+    return f"""
+        repository(owner: "{owner}", name: "{name}" ) {{
+            pullRequests(orderBy: {{ field: UPDATED_AT, direction: ASC }}, last: 50) {{
+                nodes {{
+                    headRefName
+                    headRepository {{
+                        sshUrl
+                        url
+                    }}
+                    commits (last: 1) {{
+                        nodes {{
+                            commit {{
+                                oid
+                            }}
+                        }}
+                    }}
+                    mergeCommit {{
+                        oid
+                    }}
+                }}
+            }}
+        }}
+    """
+
+
+async def fetch_pull_requests_from_domain(
+    token: str, domain: str, repos: List[Repository]
+) -> AsyncIterator[PullRequest]:
+    endpoint = (
+        f"https://api.{domain}/graphql"
+        if domain.count(".") == 1
+        else f"https://{domain}/api/graphql"
+    )
+    client = GraphQLClient(
+        endpoint=endpoint, headers={"Authorization": f"Bearer {token}"}
+    )
+    queries = [
+        f"repo{i}: {gql_query(repo.owner, repo.name)}"
+        for i, repo in enumerate(repos, 1)
+    ]
+    query = "{" + "\n".join(queries) + "}"
+    response = await client.query(query)
+    assert not response.errors
+    for repo_data in response.data.values():
+        for pr_data in repo_data["pullRequests"]["nodes"]:
+            yield PullRequest(
+                branch_name=pr_data["headRefName"],
+                repo_urls=frozenset(
+                    (
+                        pr_data["headRepository"]["sshUrl"],
+                        pr_data["headRepository"]["url"],
+                    )
+                ),
+                branch_hash=pr_data["commits"]["nodes"][0]["commit"]["oid"],
+                merged_hash=(pr_data.get("mergeCommit") or {}).get("oid"),
+            )
+
+
+async def fetch_pull_requests(
+    tokens: Callable[[str], Optional[str]],
+    urls: Iterable[str],
+    *,
+    max_concurrency: int = 5,
+) -> List[PullRequest]:
+    """Fetch the last 50 PRs for each repo
+
+    Issues calls to separate domains concurrently
+    """
+    semaphore = Semaphore(max_concurrency)
+    tasks = []
+    for domain, repos in repos_by_domain(urls).items():
+
+        async def fetch() -> List[PullRequest]:
+            async with semaphore:
+                token = tokens(domain)
+                if not token:
+                    return []
+                return [
+                    pr
+                    async for pr in fetch_pull_requests_from_domain(
+                        token, domain, repos
+                    )
+                ]
+
+        tasks.append(fetch())
+    pr_lists = await gather(*tasks)
+    return [pr for pr_list in pr_lists for pr in pr_list]
