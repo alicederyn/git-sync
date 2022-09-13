@@ -7,6 +7,7 @@ from typing import Iterable, List, Optional
 class Branch:
     name: bytes
     upstream: bytes
+    is_current: bool
 
 
 def get_current_branch() -> Optional[bytes]:
@@ -19,12 +20,13 @@ def get_default_push_remote() -> Optional[bytes]:
     return raw_bytes if raw_bytes else None
 
 
-def branches_with_remote_upstreams() -> List[Branch]:
+def get_branches_with_remote_upstreams() -> List[Branch]:
+    current_branch = get_current_branch()
     raw_bytes = check_output(
         ["git", "for-each-ref", "--format=%(refname) %(upstream)", "refs/heads"]
     )
     return [
-        Branch(name=name, upstream=upstream)
+        Branch(name=name, upstream=upstream, is_current=(name == current_branch))
         for name, upstream in (line.split(b" ") for line in raw_bytes.splitlines())
         if upstream.startswith(b"refs/remotes/")
     ]
@@ -36,7 +38,11 @@ def get_remote_branches(remote: bytes) -> List[bytes]:
     ).splitlines()
 
 
-def fast_forward_to_upstream(branches: Iterable[Branch]) -> None:
+def fetch_and_fast_forward_to_upstream(branches: Iterable[Branch]) -> None:
+    if any(b.is_current for b in branches):
+        check_call(["git", "pull", "--all"])
+    else:
+        check_call(["git", "fetch", "--all"])
     fetch_args = [b.upstream + b":" + b.name for b in branches]
     if fetch_args:
         # Use run rather than check_call as fetch will exit with a non-zero code
