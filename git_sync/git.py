@@ -123,7 +123,7 @@ async def fetch_and_fast_forward_to_upstream(branches: Iterable[Branch]) -> None
         await git("pull", "--all")
     else:
         await git("fetch", "--all")
-    fetch_args = [b.upstream + b":" + b.name for b in branches]
+    fetch_args = [b.upstream + b":" + b.name for b in branches if not b.is_current]
     if fetch_args:
         # Ignore return code as fetch will exit with a non-zero code if any
         # branch cannot be fast-forwarded, which is not a failing state for
