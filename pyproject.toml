@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "git-sync"
-version = "0.2.1"
+version = "0.2.2"
 description = "Synchronize local git repo with remotes"
 authors = ["Alice Purcell <Alice.Purcell.39@gmail.com>"]
 
