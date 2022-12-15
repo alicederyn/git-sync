@@ -110,12 +110,13 @@ async def fetch_pull_requests_from_domain(
         for pr_data in repo_data["pullRequests"]["nodes"]:
             head_repo = pr_data.get("headRepository") or {}
             repo_urls = [head_repo.get("sshUrl"), head_repo.get("url")]
-            yield PullRequest(
-                branch_name=pr_data["headRefName"],
-                repo_urls=frozenset(url for url in repo_urls if url is not None),
-                branch_hash=pr_data["commits"]["nodes"][0]["commit"]["oid"],
-                merged_hash=(pr_data.get("mergeCommit") or {}).get("oid"),
-            )
+            if pr_data["commits"]["nodes"]:
+                yield PullRequest(
+                    branch_name=pr_data["headRefName"],
+                    repo_urls=frozenset(url for url in repo_urls if url is not None),
+                    branch_hash=pr_data["commits"]["nodes"][0]["commit"]["oid"],
+                    merged_hash=(pr_data.get("mergeCommit") or {}).get("oid"),
+                )
 
 
 async def fetch_pull_requests(
