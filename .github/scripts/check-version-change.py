@@ -22,7 +22,7 @@ print(f"Old {old_name} version: {old_version}")
 print(f"New {new_name} version: {new_version}")
 
 
-def fetch_pr_labels():
+def fetch_pr_labels() -> set[str]:
     # https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request
     PR = int(re.match(r"refs/pull/(\d+)/merge", os.environ["GITHUB_REF"]).group(1))
 

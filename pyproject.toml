@@ -20,7 +20,10 @@ addopts = "--doctest-modules"
 target-version = "py310"
 
 [tool.ruff.lint]
-select = ["B", "C4", "E", "F", "I", "PYI", "RUF", "SIM", "UP", "W"]
+select = ["ANN", "B", "C4", "E", "F", "I", "PYI", "RUF", "SIM", "UP", "W"]
+ignore = [
+  "ANN101",  # Deprecated, will be removed
+]
 isort.split-on-trailing-comma = false
 
 [tool.setuptools.dynamic]
