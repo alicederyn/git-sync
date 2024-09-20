@@ -71,7 +71,6 @@ elif old_version == new_version:
             file=sys.stderr,
         )
         sys.exit(1)
-else:
-    if norelease:
-        print("norelease PRs must not bump the project version", file=sys.stderr)
-        sys.exit(1)
+elif norelease:
+    print("norelease PRs must not bump the project version", file=sys.stderr)
+    sys.exit(1)
