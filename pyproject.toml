@@ -9,9 +9,6 @@ dynamic = ["dependencies"]
 [project.scripts]
 git-sync = "git_sync:main"
 
-[tool.isort]
-profile = "black"
-
 [tool.mypy]
 python_version = "3.10"
 strict = true
@@ -21,6 +18,9 @@ addopts = "--doctest-modules"
 
 [tool.ruff]
 target-version = "py310"
+
+[tool.ruff.lint]
+select = ["I"]
 
 [tool.setuptools.dynamic]
 dependencies = { file = ["requirements.txt"] }

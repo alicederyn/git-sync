@@ -24,12 +24,12 @@ jobs:
     - name: Check formatting with ruff
       run: |
         ruff format --check .
+    - name: Lint with ruff
+      run: |
+        ruff check .
     - name: Check typing with mypy
       run: |
         mypy .
     - name: Check style with flake8
       run: |
         flake8
-    - name: Check import ordering with isort
-      run: |
-        isort --check .
