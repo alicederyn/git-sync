@@ -1,6 +1,6 @@
 -r requirements.txt
-black >= 24.8.0
 isort >= 5.10.1
 pytest >= 7.1.2
 flake8 >= 4.0.1
 mypy >= 0.950
+ruff >= 0.6.6
