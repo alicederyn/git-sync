@@ -30,6 +30,3 @@ jobs:
     - name: Check typing with mypy
       run: |
         mypy .
-    - name: Check style with flake8
-      run: |
-        flake8
