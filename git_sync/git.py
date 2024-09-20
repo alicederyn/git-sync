@@ -1,6 +1,6 @@
 from asyncio.subprocess import PIPE, create_subprocess_exec
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
 
 from .github import PullRequest
 

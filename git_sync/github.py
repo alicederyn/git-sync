@@ -1,7 +1,8 @@
 import re
 from asyncio import Semaphore, gather
+from collections.abc import AsyncIterator, Callable, Iterable
 from dataclasses import dataclass
-from typing import AsyncIterator, Callable, Iterable, TypeVar
+from typing import TypeVar
 
 from aiographql.client import GraphQLClient  # type: ignore
 

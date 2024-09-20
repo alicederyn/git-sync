@@ -20,7 +20,7 @@ addopts = "--doctest-modules"
 target-version = "py310"
 
 [tool.ruff.lint]
-select = ["B", "E", "F", "I", "PYI", "RUF", "SIM", "UP006", "UP007", "W"]
+select = ["B", "E", "F", "I", "PYI", "RUF", "SIM", "UP", "W"]
 isort.split-on-trailing-comma = false
 
 [tool.setuptools.dynamic]
