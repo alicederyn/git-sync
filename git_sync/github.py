@@ -1,7 +1,7 @@
 import re
 from asyncio import Semaphore, gather
 from dataclasses import dataclass
-from typing import AsyncIterator, Callable, Iterable, Optional, TypeVar
+from typing import AsyncIterator, Callable, Iterable, TypeVar
 
 from aiographql.client import GraphQLClient  # type: ignore
 
@@ -19,7 +19,7 @@ HTTPS_URL = re.compile(r"^https://([^/]*)/([^/]*)/([^/]*)\.git$")
 GIT_URL = re.compile(r"^git@([^:]*):([^/]*)/([^/]*)\.git$")
 
 
-def parse_repo_url(url: str) -> Optional[Repository]:
+def parse_repo_url(url: str) -> Repository | None:
     """Parse a GitHub repository URL
 
     >>> parse_repo_url("https://github.com/alicederyn/git-sync.git")
@@ -50,7 +50,7 @@ class PullRequest:
     branch_name: str
     repo_urls: frozenset[str]
     branch_hash: str
-    merged_hash: Optional[str]
+    merged_hash: str | None
 
 
 def gql_query(owner: str, name: str) -> str:
@@ -111,7 +111,7 @@ async def fetch_pull_requests_from_domain(
 
 
 async def fetch_pull_requests(
-    tokens: Callable[[str], Optional[str]],
+    tokens: Callable[[str], str | None],
     urls: Iterable[str],
     *,
     max_concurrency: int = 5,
