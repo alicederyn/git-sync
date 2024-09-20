@@ -1,6 +1,6 @@
 [project]
 name = "git-sync"
-version = "0.2.4"
+version = "0.2.5"
 description = "Synchronize local git repo with remotes"
 authors = [{ name = "Alice Purcell", email = "alicederyn@gmail.com" }]
 requires-python = ">= 3.8"
@@ -20,7 +20,7 @@ addopts = "--doctest-modules"
 target-version = "py310"
 
 [tool.ruff.lint]
-select = ["E", "F", "I"]
+select = ["B", "E", "F", "I"]
 ignore = [
     "E501",  # Line too long
 ]

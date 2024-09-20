@@ -130,21 +130,18 @@ async def fetch_pull_requests(
     Issues calls to separate domains concurrently
     """
     semaphore = Semaphore(max_concurrency)
+
+    async def fetch(domain: str, repos: List[Repository]) -> List[PullRequest]:
+        async with semaphore:
+            token = tokens(domain)
+            if not token:
+                return []
+            return [
+                pr async for pr in fetch_pull_requests_from_domain(token, domain, repos)
+            ]
+
     tasks = []
     for domain, repos in repos_by_domain(urls).items():
-
-        async def fetch() -> List[PullRequest]:
-            async with semaphore:
-                token = tokens(domain)
-                if not token:
-                    return []
-                return [
-                    pr
-                    async for pr in fetch_pull_requests_from_domain(
-                        token, domain, repos
-                    )
-                ]
-
-        tasks.append(fetch())
+        tasks.append(fetch(domain, repos))
     pr_lists = await gather(*tasks)
     return [pr for pr_list in pr_lists for pr in pr_list]
