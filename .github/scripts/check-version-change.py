@@ -22,7 +22,7 @@ print(f"Old {old_name} version: {old_version}")
 print(f"New {new_name} version: {new_version}")
 
 
-def fetch_pr_labels():
+def fetch_pr_labels() -> set[str]:
     # https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request
     PR = int(re.match(r"refs/pull/(\d+)/merge", os.environ["GITHUB_REF"]).group(1))
 
@@ -49,11 +49,9 @@ def fetch_pr_labels():
     }
   """
         ),
-        variable_values=dict(repo=REPO, owner=OWNER, pr=PR),
+        variable_values={"repo": REPO, "owner": OWNER, "pr": PR},
     )
-    return set(
-        n["name"] for n in result["repository"]["pullRequest"]["labels"]["nodes"]
-    )
+    return {n["name"] for n in result["repository"]["pullRequest"]["labels"]["nodes"]}
 
 
 norelease = "norelease" in fetch_pr_labels()
@@ -73,7 +71,6 @@ elif old_version == new_version:
             file=sys.stderr,
         )
         sys.exit(1)
-else:
-    if norelease:
-        print("norelease PRs must not bump the project version", file=sys.stderr)
-        sys.exit(1)
+elif norelease:
+    print("norelease PRs must not bump the project version", file=sys.stderr)
+    sys.exit(1)

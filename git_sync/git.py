@@ -8,7 +8,7 @@ _ExecArg = bytes | str
 
 
 class GitError(Exception):
-    def __init__(self, args: Iterable[_ExecArg], returncode: int):
+    def __init__(self, args: Iterable[_ExecArg], returncode: int) -> None:
         def tostr(arg: _ExecArg) -> str:
             return arg if isinstance(arg, str) else arg.decode(errors="replace")
 
