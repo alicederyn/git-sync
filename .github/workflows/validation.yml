@@ -23,7 +23,7 @@ jobs:
         pip install -r requirements-dev.txt
     - name: Check typing with mypy
       run: |
-        mypy --python-version 3.8 .
+        mypy .
     - name: Check style with flake8
       run: |
         flake8
