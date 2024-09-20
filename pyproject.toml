@@ -20,7 +20,7 @@ addopts = "--doctest-modules"
 target-version = "py310"
 
 [tool.ruff.lint]
-select = ["ANN", "B", "C4", "E", "F", "I", "PYI", "RUF", "SIM", "UP", "W"]
+select = ["ANN", "B", "C4", "E", "F", "I", "PGH", "PYI", "RUF", "SIM", "UP", "W"]
 ignore = [
   "ANN101",  # Deprecated, will be removed
 ]

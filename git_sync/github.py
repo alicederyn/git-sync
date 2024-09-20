@@ -4,7 +4,7 @@ from collections.abc import AsyncIterator, Callable, Iterable
 from dataclasses import dataclass
 from typing import TypeVar
 
-from aiographql.client import GraphQLClient  # type: ignore
+from aiographql.client import GraphQLClient  # type: ignore[import-untyped]
 
 T = TypeVar("T")
 
