@@ -21,15 +21,12 @@ jobs:
     - name: Install dependencies
       run: |
         pip install -r requirements-dev.txt
+    - name: Check formatting with ruff
+      run: |
+        ruff format --check .
+    - name: Lint with ruff
+      run: |
+        ruff check .
     - name: Check typing with mypy
       run: |
         mypy .
-    - name: Check style with flake8
-      run: |
-        flake8
-    - name: Check formatting with black
-      run: |
-        black --check .
-    - name: Check import ordering with isort
-      run: |
-        isort --check .
