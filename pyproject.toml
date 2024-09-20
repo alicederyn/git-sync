@@ -24,6 +24,7 @@ select = ["B", "E", "F", "I"]
 ignore = [
     "E501",  # Line too long
 ]
+isort.split-on-trailing-comma = false
 
 [tool.setuptools.dynamic]
 dependencies = { file = ["requirements.txt"] }
