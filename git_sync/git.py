@@ -1,10 +1,10 @@
 from asyncio.subprocess import PIPE, create_subprocess_exec
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Optional, Union
 
 from .github import PullRequest
 
-_ExecArg = Union[bytes, str]
+_ExecArg = bytes | str
 
 
 class GitError(Exception):
@@ -44,17 +44,17 @@ class Branch:
     is_current: bool
 
 
-async def get_current_branch() -> Optional[bytes]:
+async def get_current_branch() -> bytes | None:
     raw_bytes = await git_output("symbolic-ref", "-q", "HEAD", check_return=False)
     return raw_bytes or None
 
 
-async def get_default_push_remote() -> Optional[bytes]:
+async def get_default_push_remote() -> bytes | None:
     raw_bytes = await git_output("config", "remote.pushdefault", check_return=False)
     return raw_bytes or None
 
 
-async def get_branch_hashes() -> Dict[bytes, str]:
+async def get_branch_hashes() -> dict[bytes, str]:
     raw_bytes = await git_output(
         "for-each-ref", "--format=%(refname) %(objectname)", "refs/heads"
     )
@@ -64,7 +64,7 @@ async def get_branch_hashes() -> Dict[bytes, str]:
     }
 
 
-async def get_branches_with_remote_upstreams() -> List[Branch]:
+async def get_branches_with_remote_upstreams() -> list[Branch]:
     current_branch = await get_current_branch()
     raw_bytes = await git_output(
         "for-each-ref", "--format=%(refname) %(upstream)", "refs/heads"
@@ -82,7 +82,7 @@ class Remote:
     url: str
 
 
-async def get_remotes() -> List[Remote]:
+async def get_remotes() -> list[Remote]:
     raw_bytes = await git_output(
         "config", "--get-regexp", r"remote\..*\.url", check_return=False
     )
@@ -92,7 +92,7 @@ async def get_remotes() -> List[Remote]:
     ]
 
 
-async def get_remote_branches(remote: bytes) -> List[bytes]:
+async def get_remote_branches(remote: bytes) -> list[bytes]:
     raw_bytes = await git_output(
         "for-each-ref", "--format=%(refname)", b"refs/remotes/" + remote
     )

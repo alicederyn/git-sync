@@ -1,7 +1,6 @@
 import sys
 from asyncio import create_task, run
 from os import environ
-from typing import Optional
 
 from .git import (
     GitError,
@@ -15,7 +14,7 @@ from .git import (
 from .github import fetch_pull_requests
 
 
-def github_token(domain: str) -> Optional[str]:
+def github_token(domain: str) -> str | None:
     envvar = domain.split(".")[0].upper() + "_TOKEN"
     return environ.get(envvar)
 
