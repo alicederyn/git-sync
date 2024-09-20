@@ -1,16 +1,7 @@
 import re
 from asyncio import Semaphore, gather
 from dataclasses import dataclass
-from typing import (
-    AsyncIterator,
-    Callable,
-    Dict,
-    FrozenSet,
-    Iterable,
-    List,
-    Optional,
-    TypeVar,
-)
+from typing import AsyncIterator, Callable, Iterable, Optional, TypeVar
 
 from aiographql.client import GraphQLClient  # type: ignore
 
@@ -45,8 +36,8 @@ def parse_repo_url(url: str) -> Optional[Repository]:
     return None
 
 
-def repos_by_domain(urls: Iterable[str]) -> Dict[str, List[Repository]]:
-    result: Dict[str, List[Repository]] = {}
+def repos_by_domain(urls: Iterable[str]) -> dict[str, list[Repository]]:
+    result: dict[str, list[Repository]] = {}
     for url in urls:
         repo = parse_repo_url(url)
         if repo:
@@ -57,7 +48,7 @@ def repos_by_domain(urls: Iterable[str]) -> Dict[str, List[Repository]]:
 @dataclass(frozen=True)
 class PullRequest:
     branch_name: str
-    repo_urls: FrozenSet[str]
+    repo_urls: frozenset[str]
     branch_hash: str
     merged_hash: Optional[str]
 
@@ -89,7 +80,7 @@ def gql_query(owner: str, name: str) -> str:
 
 
 async def fetch_pull_requests_from_domain(
-    token: str, domain: str, repos: List[Repository]
+    token: str, domain: str, repos: list[Repository]
 ) -> AsyncIterator[PullRequest]:
     endpoint = (
         f"https://api.{domain}/graphql"
@@ -124,14 +115,14 @@ async def fetch_pull_requests(
     urls: Iterable[str],
     *,
     max_concurrency: int = 5,
-) -> List[PullRequest]:
+) -> list[PullRequest]:
     """Fetch the last 50 PRs for each repo
 
     Issues calls to separate domains concurrently
     """
     semaphore = Semaphore(max_concurrency)
 
-    async def fetch(domain: str, repos: List[Repository]) -> List[PullRequest]:
+    async def fetch(domain: str, repos: list[Repository]) -> list[PullRequest]:
         async with semaphore:
             token = tokens(domain)
             if not token:
