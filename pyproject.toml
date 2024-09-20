@@ -1,22 +1,13 @@
-[tool.poetry]
+[project]
 name = "git-sync"
 version = "0.2.3"
 description = "Synchronize local git repo with remotes"
-authors = ["Alice Purcell <Alice.Purcell.39@gmail.com>"]
+authors = [{ name = "Alice Purcell", email = "alicederyn@gmail.com" }]
+requires-python = ">= 3.8"
+dynamic = ["dependencies"]
 
-[tool.poetry.scripts]
+[project.scripts]
 git-sync = "git_sync:main"
-
-[tool.poetry.dependencies]
-python = "^3.8"
-aiographql-client = "^1.0.3"
-
-[tool.poetry.dev-dependencies]
-black = "^22.3.0"
-isort = "^5.10.1"
-pytest = "^7.1.2"
-flake8 = "^4.0.1"
-mypy = "^0.950"
 
 [tool.isort]
 profile = "black"
@@ -27,6 +18,9 @@ strict = true
 [tool.pytest.ini_options]
 addopts = "--doctest-modules"
 
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+
 [build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["setuptools >= 75"]
+build-backend = "setuptools.build_meta"
