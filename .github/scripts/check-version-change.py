@@ -10,14 +10,14 @@ from packaging import version
 
 # Fetch version information
 new_pyproject = toml.load("pyproject.toml")
-new_name = new_pyproject["tool"]["poetry"]["name"]
-new_version = version.parse(new_pyproject["tool"]["poetry"]["version"])
+new_name = new_pyproject["project"]["name"]
+new_version = version.parse(new_pyproject["project"]["version"])
 old_pyproject_s = check_output(
     ["git", "show", "origin/main:pyproject.toml"], encoding="utf-8"
 )
 old_pyproject = toml.loads(old_pyproject_s)
-old_name = old_pyproject["tool"]["poetry"]["name"]
-old_version = version.parse(old_pyproject["tool"]["poetry"]["version"])
+old_name = old_pyproject["project"]["name"]
+old_version = version.parse(old_pyproject["project"]["version"])
 print(f"Old {old_name} version: {old_version}")
 print(f"New {new_name} version: {new_version}")
 
