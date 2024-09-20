@@ -49,11 +49,9 @@ def fetch_pr_labels():
     }
   """
         ),
-        variable_values=dict(repo=REPO, owner=OWNER, pr=PR),
+        variable_values={"repo": REPO, "owner": OWNER, "pr": PR},
     )
-    return set(
-        n["name"] for n in result["repository"]["pullRequest"]["labels"]["nodes"]
-    )
+    return {n["name"] for n in result["repository"]["pullRequest"]["labels"]["nodes"]}
 
 
 norelease = "norelease" in fetch_pr_labels()
