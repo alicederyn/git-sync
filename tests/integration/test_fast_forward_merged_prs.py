@@ -208,3 +208,53 @@ async def test_unstaged_changes_to_committed_files_not_lost() -> None:
     }
     # And the unstaged changes are preserved
     assert Path("file.txt").read_text() == "C\n"
+
+
+@pytest.mark.asyncio
+async def test_fastforward_when_pr_had_additional_commits() -> None:
+    # Given a merged PR with additional commits
+    commit_a = create_commit("main", file="A\n")
+    commit_b = create_commit(commit_a, file="B\n")
+    commit_c = create_commit(commit_b, file="C\n")
+    commit_d = squash_merge(commit_a, commit_c)
+    setup_branches(main=commit_d, my_pr=commit_b, active_branch="my_pr")
+    pr = PullRequest(
+        branch_name="my_pr",
+        repo_urls=frozenset([REPO_URL]),
+        branch_hash=commit_c,
+        merged_hash=commit_d,
+    )
+
+    # When we fast forward
+    await fast_forward_merged_prs(REPO_URL, [pr])
+
+    # Then the PR branch is fast-forwarded to the merged commit
+    assert all_branches() == {
+        "main": commit_d,
+        "my_pr": commit_d,
+    }
+
+
+@pytest.mark.asyncio
+async def test_no_fastforward_when_branch_has_additional_commits() -> None:
+    # Given a branch with additional commits
+    commit_a = create_commit("main", file="A\n")
+    commit_b = create_commit(commit_a, file="B\n")
+    commit_c = create_commit(commit_b, file="C\n")
+    commit_d = squash_merge(commit_a, commit_c)
+    setup_branches(main=commit_d, my_pr=commit_c, active_branch="my_pr")
+    pr = PullRequest(
+        branch_name="my_pr",
+        repo_urls=frozenset([REPO_URL]),
+        branch_hash=commit_b,
+        merged_hash=commit_d,
+    )
+
+    # When we fast forward
+    await fast_forward_merged_prs(REPO_URL, [pr])
+
+    # Then the PR branch is unaffected
+    assert all_branches() == {
+        "main": commit_d,
+        "my_pr": commit_c,
+    }

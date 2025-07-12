@@ -181,7 +181,7 @@ async def fast_forward_merged_prs(
             and push_remote_url in pr.repo_urls
         ):
             try:
-                branch_is_ancestor = await is_ancestor(branch_name, pr.branch_name)
+                branch_is_ancestor = await is_ancestor(branch_name, pr.branch_hash)
             except GitError:
                 pass  # Probably no longer have the commit hash
             else:
