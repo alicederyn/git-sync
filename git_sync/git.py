@@ -150,9 +150,38 @@ async def fast_forward_to_downstream(
             await git("push", push_remote, short_branch_name)
 
 
-async def fast_forward_branch(
-    branch_name: bytes, merged_hash: str, current_branch: bytes | None = None
+async def get_upstream_branch(branch_name: bytes) -> bytes | None:
+    upstream = await git_output(
+        "for-each-ref", "--format=%(upstream)", b"refs/heads/" + branch_name
+    )
+    if upstream and upstream.startswith(b"refs/heads/"):
+        return upstream.removeprefix(b"refs/heads/")
+    return None
+
+
+async def branch_is_an_upstream(branch_name: bytes) -> bool:
+    """Return true if the branch is upstream of any other branch."""
+    upstreams = await git_output("for-each-ref", "--format=%(upstream)", "refs/heads")
+    upstream_heads = {
+        upstream.removeprefix(b"refs/heads/")
+        for upstream in upstreams.strip().splitlines()
+    }
+    return branch_name in upstream_heads
+
+
+async def update_merged_pr_branch(
+    branch_name: bytes,
+    merged_hash: str,
+    *,
+    allow_delete: bool = True,
 ) -> None:
+    """Delete or fast-forward a merged PR branch.
+
+    If there are any uncommitted changes on the branch, it will be skipped.
+    If the branch is not an upstream of any other branch, it will be deleted.
+    """
+    current_branch = await get_current_branch()
+    current_branch = current_branch and current_branch[11:]
     if current_branch == branch_name:
         any_staged_changes = await git_output(
             "diff", "--cached", "--exit-code", check_return=False
@@ -166,17 +195,23 @@ async def fast_forward_branch(
         if any_unstaged_changes_to_committed_files:
             print(f"Unstaged changes on {branch_name.decode()}, skipping fast-forward")
             return
-        await git("reset", "--hard", merged_hash)
-    else:
-        await git("branch", "--force", branch_name, merged_hash)
+        if allow_delete and not await branch_is_an_upstream(branch_name):
+            upstream = (await get_upstream_branch(branch_name)) or b"main"
+            await git("checkout", upstream)
+            await git("branch", "-D", branch_name)
+        else:
+            await git("reset", "--hard", merged_hash)
+    else:  # noqa: PLR5501
+        if allow_delete and not await branch_is_an_upstream(branch_name):
+            await git("branch", "-D", branch_name)
+        else:
+            await git("branch", "--force", branch_name, merged_hash)
     print(f"Fast-forward {branch_name.decode()} to {merged_hash}")
 
 
-async def fast_forward_merged_prs(
-    push_remote_url: str, prs: Iterable[PullRequest]
+async def update_merged_prs(
+    push_remote_url: str, prs: Iterable[PullRequest], *, allow_delete: bool = True
 ) -> None:
-    current_branch = await get_current_branch()
-    current_branch = current_branch and current_branch[11:]
     branch_hashes = await get_branch_hashes()
     for pr in prs:
         branch_name = pr.branch_name.encode("utf-8")
@@ -193,8 +228,8 @@ async def fast_forward_merged_prs(
                 pass  # Probably no longer have the commit hash
             else:
                 if branch_is_ancestor:
-                    await fast_forward_branch(
+                    await update_merged_pr_branch(
                         branch_name=branch_name,
                         merged_hash=merged_hash,
-                        current_branch=current_branch,
+                        allow_delete=allow_delete,
                     )

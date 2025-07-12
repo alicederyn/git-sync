@@ -6,13 +6,13 @@ from os import environ
 from .git import (
     GitError,
     Remote,
-    fast_forward_merged_prs,
     fast_forward_to_downstream,
     fetch_and_fast_forward_to_upstream,
     get_branches_with_remote_upstreams,
     get_default_push_remote,
     get_remotes,
     in_git_repo,
+    update_merged_prs,
 )
 from .github import fetch_pull_requests, repos_by_domain
 
@@ -47,7 +47,9 @@ def get_description(
             domain for domain in domains if not github_token(domain)
         )
         if domains_with_tokens:
-            description += "\nMerged PR branches will be fast-forwarded."
+            description += (
+                "\nMerged PR branches will be fast-forwarded or, if safe, deleted."
+            )
         if domains_without_tokens:
             description += "\n"
             description += "Full github" if domains_with_tokens else "Github"
@@ -67,6 +69,13 @@ def get_description(
 
 def get_command_line_args(description: str) -> Namespace:
     parser = ArgumentParser(description=description)
+    parser.add_argument(
+        "--no-delete",
+        action="store_false",
+        help="Never delete branches",
+        default=True,
+        dest="allow_delete",
+    )
     return parser.parse_args()
 
 
@@ -82,7 +91,7 @@ async def git_sync() -> None:
     domains = sorted(repos_by_domain(remote_urls).keys())
 
     description = get_description(is_in_git_repo, push_remote, remotes, domains)
-    get_command_line_args(description)
+    args = get_command_line_args(description)
 
     if not is_in_git_repo:
         print("Error: Not in a git repository", file=sys.stderr)
@@ -107,7 +116,9 @@ async def git_sync() -> None:
             push_remote_url = next(
                 remote.url for remote in remotes if remote.name == push_remote
             )
-            await fast_forward_merged_prs(push_remote_url, pull_requests)
+            await update_merged_prs(
+                push_remote_url, pull_requests, allow_delete=args.allow_delete
+            )
 
 
 def main() -> None:
