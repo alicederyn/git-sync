@@ -1,4 +1,4 @@
-from asyncio.subprocess import PIPE, create_subprocess_exec
+from asyncio.subprocess import DEVNULL, PIPE, create_subprocess_exec
 from collections.abc import Iterable
 from dataclasses import dataclass
 
@@ -42,6 +42,13 @@ class Branch:
     name: bytes
     upstream: bytes
     is_current: bool
+
+
+async def in_git_repo() -> bool:
+    proc = await create_subprocess_exec(
+        "git", "rev-parse", "--is-inside-work-tree", stdout=DEVNULL, stderr=DEVNULL
+    )
+    return await proc.wait() == 0
 
 
 async def get_current_branch() -> bytes | None:
