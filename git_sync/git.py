@@ -143,6 +143,28 @@ async def fast_forward_to_downstream(
             await git("push", push_remote, short_branch_name)
 
 
+async def fast_forward_branch(
+    branch_name: bytes, merged_hash: str, current_branch: bytes | None = None
+) -> None:
+    if current_branch == branch_name:
+        any_staged_changes = await git_output(
+            "diff", "--cached", "--exit-code", check_return=False
+        )
+        if any_staged_changes:
+            print(f"Staged changes on {branch_name.decode()}, skipping fast-forward")
+            return
+        any_unstaged_changes_to_committed_files = await git_output(
+            "diff", "--exit-code", check_return=False
+        )
+        if any_unstaged_changes_to_committed_files:
+            print(f"Unstaged changes on {branch_name.decode()}, skipping fast-forward")
+            return
+        await git("reset", "--hard", merged_hash)
+    else:
+        await git("branch", "--force", branch_name, merged_hash)
+    print(f"Fast-forward {branch_name.decode()} to {merged_hash}")
+
+
 async def fast_forward_merged_prs(
     push_remote_url: str, prs: Iterable[PullRequest]
 ) -> None:
@@ -164,8 +186,8 @@ async def fast_forward_merged_prs(
                 pass  # Probably no longer have the commit hash
             else:
                 if branch_is_ancestor:
-                    print(f"Fast-forward {pr.branch_name} to {pr.merged_hash}")
-                    if branch_name == current_branch:
-                        await git("reset", "--hard", merged_hash)
-                    else:
-                        await git("branch", "--force", branch_name, merged_hash)
+                    await fast_forward_branch(
+                        branch_name=branch_name,
+                        merged_hash=merged_hash,
+                        current_branch=current_branch,
+                    )

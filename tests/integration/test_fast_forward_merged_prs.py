@@ -37,6 +37,21 @@ def run_in_git_repo(tmp_path: Path) -> Iterator[None]:
         os.chdir(original_dir)
 
 
+def stage_changes(**files: str) -> None:
+    for filename, content in files.items():
+        Path(filename + ".txt").write_text(content)
+    subprocess.run(
+        ["git", "add", *(filename + ".txt" for filename in files)], check=True
+    )
+
+
+def all_staged_changes() -> dict[str, str]:
+    return {
+        Path(filename).stem: Path(filename).read_text()
+        for filename in run_split_stdout(["git", "diff", "--name-only", "--cached"])
+    }
+
+
 def create_commit(base_commit: str, **files: str) -> str:
     subprocess.run(["git", "checkout", base_commit], check=True)
     for filename, content in files.items():
@@ -139,3 +154,57 @@ async def test_force_active_branch_to_merged_commit() -> None:
         "main": commit_c,
         "my_pr": commit_c,
     }
+
+
+@pytest.mark.asyncio
+async def test_staged_changes_not_lost() -> None:
+    # Given staged changes over a merged PR
+    commit_a = create_commit("main", file="A\n")
+    commit_b = create_commit(commit_a, file="B\n")
+    commit_c = squash_merge(commit_a, commit_b)
+    setup_branches(main=commit_c, my_pr=commit_b, active_branch="my_pr")
+    stage_changes(file="C\n")
+    pr = PullRequest(
+        branch_name="my_pr",
+        repo_urls=frozenset([REPO_URL]),
+        branch_hash=commit_b,
+        merged_hash=commit_c,
+    )
+
+    # When we fast forward
+    await fast_forward_merged_prs(REPO_URL, [pr])
+
+    # Then the active branch is unaffected
+    assert all_branches() == {
+        "main": commit_c,
+        "my_pr": commit_b,
+    }
+    # And the staged changes are preserved
+    assert all_staged_changes() == {"file": "C\n"}
+
+
+@pytest.mark.asyncio
+async def test_unstaged_changes_to_committed_files_not_lost() -> None:
+    # Given unstaged changes to committed files over a merged PR
+    commit_a = create_commit("main", file="A\n")
+    commit_b = create_commit(commit_a, file="B\n")
+    commit_c = squash_merge(commit_a, commit_b)
+    setup_branches(main=commit_c, my_pr=commit_b, active_branch="my_pr")
+    Path("file.txt").write_text("C\n")
+    pr = PullRequest(
+        branch_name="my_pr",
+        repo_urls=frozenset([REPO_URL]),
+        branch_hash=commit_b,
+        merged_hash=commit_c,
+    )
+
+    # When we fast forward
+    await fast_forward_merged_prs(REPO_URL, [pr])
+
+    # Then the active branch is unaffected
+    assert all_branches() == {
+        "main": commit_c,
+        "my_pr": commit_b,
+    }
+    # And the unstaged changes are preserved
+    assert Path("file.txt").read_text() == "C\n"
