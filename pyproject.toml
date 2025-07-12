@@ -1,6 +1,6 @@
 [project]
 name = "git-sync"
-version = "0.3"
+version = "0.4"
 description = "Synchronize local git repo with remotes"
 authors = [{ name = "Alice Purcell", email = "alicederyn@gmail.com" }]
 requires-python = ">= 3.12"
