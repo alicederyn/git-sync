@@ -1,11 +1,8 @@
-import pytest
-
 from git_sync.git import is_ancestor
 
 from .gitutils import create_commit
 
 
-@pytest.mark.asyncio
 async def test_is_ancestor_simple() -> None:
     # Given two commits
     base = create_commit("HEAD", foo="a")

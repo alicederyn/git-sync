@@ -1,7 +1,5 @@
 from pathlib import Path
 
-import pytest
-
 from git_sync.git import update_merged_prs
 from git_sync.github import PullRequest
 
@@ -19,7 +17,6 @@ from .gitutils import (
 REPO_URL = "https://github.com/example/example.git"  # Dummy URL for test
 
 
-@pytest.mark.asyncio
 async def test_delete_merged_inactive_pr_branch() -> None:
     # Given a merged PR
     commit_a = create_commit("main", file="A\n")
@@ -47,7 +44,6 @@ async def test_delete_merged_inactive_pr_branch() -> None:
     }
 
 
-@pytest.mark.asyncio
 async def test_force_inactive_upstream_branch_to_merged_commit() -> None:
     # Given a merged PR
     commit_a = create_commit("main", file="A\n")
@@ -76,7 +72,6 @@ async def test_force_inactive_upstream_branch_to_merged_commit() -> None:
     }
 
 
-@pytest.mark.asyncio
 async def test_merged_inactive_pr_branch_with_deletion_disabled() -> None:
     # Given a merged PR
     commit_a = create_commit("main", file="A\n")
@@ -105,7 +100,6 @@ async def test_merged_inactive_pr_branch_with_deletion_disabled() -> None:
     }
 
 
-@pytest.mark.asyncio
 async def test_delete_merged_active_pr_branch() -> None:
     # Given a merged PR
     commit_a = create_commit("main", file="A\n")
@@ -135,7 +129,6 @@ async def test_delete_merged_active_pr_branch() -> None:
     assert get_current_branch() == "main"
 
 
-@pytest.mark.asyncio
 async def test_force_active_upstream_branch_to_merged_commit() -> None:
     # Given a merged PR
     commit_a = create_commit("main", file="A\n")
@@ -164,7 +157,6 @@ async def test_force_active_upstream_branch_to_merged_commit() -> None:
     }
 
 
-@pytest.mark.asyncio
 async def test_merged_active_upstream_branch_with_deletion_disabled() -> None:
     # Given a merged PR
     commit_a = create_commit("main", file="A\n")
@@ -193,7 +185,6 @@ async def test_merged_active_upstream_branch_with_deletion_disabled() -> None:
     }
 
 
-@pytest.mark.asyncio
 async def test_staged_changes_not_lost() -> None:
     # Given staged changes over a merged PR
     commit_a = create_commit("main", file="A\n")
@@ -220,7 +211,6 @@ async def test_staged_changes_not_lost() -> None:
     assert all_staged_changes() == {"file": "C\n"}
 
 
-@pytest.mark.asyncio
 async def test_unstaged_changes_to_committed_files_not_lost() -> None:
     # Given unstaged changes to committed files over a merged PR
     commit_a = create_commit("main", file="A\n")
@@ -247,7 +237,6 @@ async def test_unstaged_changes_to_committed_files_not_lost() -> None:
     assert Path("file.txt").read_text() == "C\n"
 
 
-@pytest.mark.asyncio
 async def test_fastforward_when_pr_had_additional_commits() -> None:
     # Given a merged PR with additional commits
     commit_a = create_commit("main", file="A\n")
@@ -277,7 +266,6 @@ async def test_fastforward_when_pr_had_additional_commits() -> None:
     }
 
 
-@pytest.mark.asyncio
 async def test_no_fastforward_when_branch_has_additional_commits() -> None:
     # Given a branch with additional commits
     commit_a = create_commit("main", file="A\n")
