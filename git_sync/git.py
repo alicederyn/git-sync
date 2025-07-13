@@ -107,15 +107,7 @@ async def get_remote_branches(remote: bytes) -> list[bytes]:
 
 
 async def is_ancestor(commit1: _ExecArg, commit2: _ExecArg) -> bool:
-    """Return true if commit1 is an ancestor of commit2
-
-    For instance, 2d406492de55 is merge #11 and 8ee9b133bb73 #12:
-    >>> from asyncio import run
-    >>> run(is_ancestor("2d406492de55", "8ee9b133bb73"))
-    True
-    >>> run(is_ancestor("8ee9b133bb73", "2d406492de55"))
-    False
-    """
+    """Return true if commit1 is an ancestor of commit2."""
     try:
         await git("merge-base", "--is-ancestor", commit1, commit2)
         return True
