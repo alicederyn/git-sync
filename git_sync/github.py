@@ -1,9 +1,9 @@
 import re
 import ssl
 from asyncio import Semaphore, gather
-from collections.abc import AsyncIterator, Callable, Iterable
+from collections.abc import AsyncIterator, Callable, Iterable, Iterator
 from dataclasses import dataclass
-from typing import TypeVar
+from typing import Any, TypeVar
 
 import aiohttp
 import truststore
@@ -110,6 +110,15 @@ def client_session() -> aiohttp.ClientSession:
     return aiohttp.ClientSession(trust_env=True, connector=connector)
 
 
+def repo_urls(pr_data: dict[str, Any]) -> Iterator[str]:
+    head_repo = pr_data.get("headRepository") or {}
+    if ssh_url := head_repo.get("sshUrl"):
+        yield ssh_url
+    if http_url := head_repo.get("url"):
+        yield http_url
+        yield http_url + ".git"
+
+
 async def fetch_pull_requests_from_domain(
     token: str, domain: str, repos: list[Repository]
 ) -> AsyncIterator[PullRequest]:
@@ -146,15 +155,13 @@ async def fetch_pull_requests_from_domain(
 
         # Yield response data as PullRequest objects
         for pr_data in details_response.data.values():
-            head_repo = pr_data.get("headRepository") or {}
-            repo_urls = [head_repo.get("sshUrl"), head_repo.get("url")]
             hashes = tuple(
                 commit["commit"]["oid"]
                 for commit in reversed(pr_data["commits"]["nodes"])
             )
             yield PullRequest(
                 branch_name=pr_data["headRefName"],
-                repo_urls=frozenset(url for url in repo_urls if url is not None),
+                repo_urls=frozenset(repo_urls(pr_data)),
                 hashes=hashes,
                 merged_hash=(pr_data.get("mergeCommit") or {}).get("oid"),
             )
