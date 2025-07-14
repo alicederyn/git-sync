@@ -5,7 +5,7 @@ Utility script that synchronizes a local repository with all remotes:
  - fetches all remotes
  - fast-forwards all local branches that have a remote upstream
  - pushes upstream changes to the default push remote
- - fast-forwards branches associated with merged PRs to the merge commit
+ - fast-forwards or deletes branches associated with merged PRs to the merge commit
 
 Not all git configuration is taken into account; please open an issue if this causes problems.
 
