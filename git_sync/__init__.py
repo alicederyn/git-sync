@@ -97,8 +97,11 @@ async def git_sync() -> None:
         print("Error: Not in a git repository", file=sys.stderr)
         sys.exit(2)
 
-    if remote_urls:
-        pull_request_task = create_task(fetch_pull_requests(github_token, remote_urls))
+    pull_request_task = (
+        create_task(fetch_pull_requests(github_token, remote_urls))
+        if remote_urls
+        else None
+    )
 
     try:
         branches = await get_branches_with_remote_upstreams()
@@ -111,7 +114,7 @@ async def git_sync() -> None:
     if push_remote:
         await fast_forward_to_downstream(push_remote, branches)
 
-        if remote_urls:
+        if pull_request_task is not None:
             pull_requests = await pull_request_task
             push_remote_url = next(
                 remote.url for remote in remotes if remote.name == push_remote
