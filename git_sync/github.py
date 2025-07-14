@@ -1,9 +1,12 @@
 import re
+import ssl
 from asyncio import Semaphore, gather
 from collections.abc import AsyncIterator, Callable, Iterable
 from dataclasses import dataclass
 from typing import TypeVar
 
+import aiohttp
+import truststore
 from aiographql.client import GraphQLClient  # type: ignore[import-untyped]
 
 T = TypeVar("T")
@@ -101,6 +104,12 @@ def join_queries(queries: Iterable[str]) -> str:
     return "{" + "\n".join(f"q{i}: {query}" for i, query in enumerate(queries)) + "}"
 
 
+def client_session() -> aiohttp.ClientSession:
+    """Configure aiohttp to trust local SSL credentials and environment variables."""
+    connector = aiohttp.TCPConnector(ssl=truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT))
+    return aiohttp.ClientSession(trust_env=True, connector=connector)
+
+
 async def fetch_pull_requests_from_domain(
     token: str, domain: str, repos: list[Repository]
 ) -> AsyncIterator[PullRequest]:
@@ -109,41 +118,46 @@ async def fetch_pull_requests_from_domain(
         if domain.count(".") == 1
         else f"https://{domain}/api/graphql"
     )
-    client = GraphQLClient(
-        endpoint=endpoint, headers={"Authorization": f"Bearer {token}"}
-    )
 
-    # Query for PRs and commit counts
-    initial_queries = [
-        pr_initial_query(repo.owner, repo.name) for i, repo in enumerate(repos, 1)
-    ]
-    initial_response = await client.query(join_queries(initial_queries))
-    assert not initial_response.errors
-
-    # Determine what follow-up queries to make
-    details_queries = [
-        pr_details_query(pr_data["id"], pr_data["commits"]["totalCount"])
-        for repo_data in initial_response.data.values()
-        for pr_data in repo_data["pullRequests"]["nodes"]
-    ]
-
-    # Query for detailed PR information
-    details_response = await client.query(join_queries(details_queries))
-    assert not details_response.errors
-
-    # Yield response data as PullRequest objects
-    for pr_data in details_response.data.values():
-        head_repo = pr_data.get("headRepository") or {}
-        repo_urls = [head_repo.get("sshUrl"), head_repo.get("url")]
-        hashes = tuple(
-            commit["commit"]["oid"] for commit in reversed(pr_data["commits"]["nodes"])
+    async with client_session() as session:
+        client = GraphQLClient(
+            endpoint=endpoint,
+            headers={"Authorization": f"Bearer {token}"},
+            session=session,
         )
-        yield PullRequest(
-            branch_name=pr_data["headRefName"],
-            repo_urls=frozenset(url for url in repo_urls if url is not None),
-            hashes=hashes,
-            merged_hash=(pr_data.get("mergeCommit") or {}).get("oid"),
-        )
+
+        # Query for PRs and commit counts
+        initial_queries = [
+            pr_initial_query(repo.owner, repo.name) for i, repo in enumerate(repos, 1)
+        ]
+        initial_response = await client.query(join_queries(initial_queries))
+        assert not initial_response.errors
+
+        # Determine what follow-up queries to make
+        details_queries = [
+            pr_details_query(pr_data["id"], pr_data["commits"]["totalCount"])
+            for repo_data in initial_response.data.values()
+            for pr_data in repo_data["pullRequests"]["nodes"]
+        ]
+
+        # Query for detailed PR information
+        details_response = await client.query(join_queries(details_queries))
+        assert not details_response.errors
+
+        # Yield response data as PullRequest objects
+        for pr_data in details_response.data.values():
+            head_repo = pr_data.get("headRepository") or {}
+            repo_urls = [head_repo.get("sshUrl"), head_repo.get("url")]
+            hashes = tuple(
+                commit["commit"]["oid"]
+                for commit in reversed(pr_data["commits"]["nodes"])
+            )
+            yield PullRequest(
+                branch_name=pr_data["headRefName"],
+                repo_urls=frozenset(url for url in repo_urls if url is not None),
+                hashes=hashes,
+                merged_hash=(pr_data.get("mergeCommit") or {}).get("oid"),
+            )
 
 
 async def fetch_pull_requests(
