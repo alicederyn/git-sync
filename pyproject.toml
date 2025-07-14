@@ -1,6 +1,6 @@
 [project]
 name = "git-sync"
-version = "0.4"
+version = "0.4.1"
 description = "Synchronize local git repo with remotes"
 authors = [{ name = "Alice Purcell", email = "alicederyn@gmail.com" }]
 requires-python = ">= 3.12"
@@ -22,9 +22,6 @@ target-version = "py310"
 
 [tool.ruff.lint]
 select = ["ANN", "B", "C4", "E", "F", "I", "PGH", "PLR", "PYI", "RUF", "SIM", "UP", "W"]
-ignore = [
-  "ANN101",  # Deprecated, will be removed
-]
 isort.split-on-trailing-comma = false
 
 [tool.setuptools.dynamic]

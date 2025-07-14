@@ -106,17 +106,6 @@ async def get_remote_branches(remote: bytes) -> list[bytes]:
     return raw_bytes.splitlines()
 
 
-async def is_ancestor(commit1: _ExecArg, commit2: _ExecArg) -> bool:
-    """Return true if commit1 is an ancestor of commit2."""
-    try:
-        await git("merge-base", "--is-ancestor", commit1, commit2)
-        return True
-    except GitError as e:
-        if e.returncode == 1:
-            return False
-        raise
-
-
 async def fetch_and_fast_forward_to_upstream(branches: Iterable[Branch]) -> None:
     if any(b.is_current for b in branches):
         await git("pull", "--all")
@@ -211,17 +200,11 @@ async def update_merged_prs(
         if (
             merged_hash
             and branch_name in branch_hashes
-            and merged_hash != branch_hashes[branch_name]
+            and branch_hashes[branch_name] in pr.hashes
             and push_remote_url in pr.repo_urls
         ):
-            try:
-                branch_is_ancestor = await is_ancestor(branch_name, pr.branch_hash)
-            except GitError:
-                pass  # Probably no longer have the commit hash
-            else:
-                if branch_is_ancestor:
-                    await update_merged_pr_branch(
-                        branch_name=branch_name,
-                        merged_hash=merged_hash,
-                        allow_delete=allow_delete,
-                    )
+            await update_merged_pr_branch(
+                branch_name=branch_name,
+                merged_hash=merged_hash,
+                allow_delete=allow_delete,
+            )
