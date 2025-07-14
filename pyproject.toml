@@ -1,6 +1,6 @@
 [project]
 name = "git-sync"
-version = "0.3"
+version = "0.4"
 description = "Synchronize local git repo with remotes"
 authors = [{ name = "Alice Purcell", email = "alicederyn@gmail.com" }]
 requires-python = ">= 3.12"
@@ -15,6 +15,7 @@ strict = true
 
 [tool.pytest.ini_options]
 addopts = "--doctest-modules"
+asyncio_mode = "auto"
 
 [tool.ruff]
 target-version = "py310"
