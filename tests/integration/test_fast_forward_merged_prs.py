@@ -30,7 +30,7 @@ async def test_delete_merged_inactive_pr_branch() -> None:
     pr = PullRequest(
         branch_name="my_pr",
         repo_urls=frozenset([REPO_URL]),
-        branch_hash=commit_b,
+        hashes=(commit_b,),
         merged_hash=commit_c,
     )
 
@@ -57,7 +57,7 @@ async def test_force_inactive_upstream_branch_to_merged_commit() -> None:
     pr = PullRequest(
         branch_name="my_pr",
         repo_urls=frozenset([REPO_URL]),
-        branch_hash=commit_b,
+        hashes=(commit_b,),
         merged_hash=commit_c,
     )
 
@@ -85,7 +85,7 @@ async def test_merged_inactive_pr_branch_with_deletion_disabled() -> None:
     pr = PullRequest(
         branch_name="my_pr",
         repo_urls=frozenset([REPO_URL]),
-        branch_hash=commit_b,
+        hashes=(commit_b,),
         merged_hash=commit_c,
     )
 
@@ -113,7 +113,7 @@ async def test_delete_merged_active_pr_branch() -> None:
     pr = PullRequest(
         branch_name="my_pr",
         repo_urls=frozenset([REPO_URL]),
-        branch_hash=commit_b,
+        hashes=(commit_b,),
         merged_hash=commit_c,
     )
 
@@ -142,7 +142,7 @@ async def test_force_active_upstream_branch_to_merged_commit() -> None:
     pr = PullRequest(
         branch_name="my_pr",
         repo_urls=frozenset([REPO_URL]),
-        branch_hash=commit_b,
+        hashes=(commit_b,),
         merged_hash=commit_c,
     )
 
@@ -170,7 +170,7 @@ async def test_merged_active_upstream_branch_with_deletion_disabled() -> None:
     pr = PullRequest(
         branch_name="my_pr",
         repo_urls=frozenset([REPO_URL]),
-        branch_hash=commit_b,
+        hashes=(commit_b,),
         merged_hash=commit_c,
     )
 
@@ -195,7 +195,7 @@ async def test_staged_changes_not_lost() -> None:
     pr = PullRequest(
         branch_name="my_pr",
         repo_urls=frozenset([REPO_URL]),
-        branch_hash=commit_b,
+        hashes=(commit_b,),
         merged_hash=commit_c,
     )
 
@@ -221,7 +221,7 @@ async def test_unstaged_changes_to_committed_files_not_lost() -> None:
     pr = PullRequest(
         branch_name="my_pr",
         repo_urls=frozenset([REPO_URL]),
-        branch_hash=commit_b,
+        hashes=(commit_b,),
         merged_hash=commit_c,
     )
 
@@ -251,7 +251,7 @@ async def test_fastforward_when_pr_had_additional_commits() -> None:
     pr = PullRequest(
         branch_name="my_pr",
         repo_urls=frozenset([REPO_URL]),
-        branch_hash=commit_c,
+        hashes=(commit_c, commit_b),
         merged_hash=commit_d,
     )
 
@@ -276,7 +276,7 @@ async def test_no_fastforward_when_branch_has_additional_commits() -> None:
     pr = PullRequest(
         branch_name="my_pr",
         repo_urls=frozenset([REPO_URL]),
-        branch_hash=commit_b,
+        hashes=(commit_b,),
         merged_hash=commit_d,
     )
 
