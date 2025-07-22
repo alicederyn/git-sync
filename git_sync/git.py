@@ -182,7 +182,7 @@ async def update_merged_pr_branch(
             await git("branch", "-D", branch_name)
         else:
             await git("reset", "--hard", merged_hash)
-    else:  # noqa: PLR5501
+    else:
         if allow_delete and not await branch_is_an_upstream(branch_name):
             await git("branch", "-D", branch_name)
         else:

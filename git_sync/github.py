@@ -140,7 +140,9 @@ async def fetch_pull_requests_from_domain(
             pr_initial_query(repo.owner, repo.name) for i, repo in enumerate(repos, 1)
         ]
         initial_response = await client.query(join_queries(initial_queries))
-        assert not initial_response.errors
+        if initial_response.errors:
+            msg = f"GraphQL query failed: {initial_response.errors}"
+            raise RuntimeError(msg)
 
         # Determine what follow-up queries to make
         details_queries = [
@@ -149,9 +151,15 @@ async def fetch_pull_requests_from_domain(
             for pr_data in repo_data["pullRequests"]["nodes"]
         ]
 
+        # If there are no PRs, make no follow-up query
+        if not details_queries:
+            return
+
         # Query for detailed PR information
         details_response = await client.query(join_queries(details_queries))
-        assert not details_response.errors
+        if details_response.errors:
+            msg = f"GraphQL query failed: {details_response.errors}"
+            raise RuntimeError(msg)
 
         # Yield response data as PullRequest objects
         for pr_data in details_response.data.values():
