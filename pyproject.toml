@@ -21,7 +21,8 @@ asyncio_mode = "auto"
 target-version = "py310"
 
 [tool.ruff.lint]
-select = ["ANN", "B", "C4", "E", "F", "I", "PGH", "PLR", "PYI", "RUF", "SIM", "UP", "W"]
+select = ["ANN", "B", "C4", "E", "F", "I", "PGH", "PL", "PYI", "RUF", "SIM", "UP", "W"]
+ignore = ["PLR"]
 isort.split-on-trailing-comma = false
 
 [tool.setuptools.dynamic]
