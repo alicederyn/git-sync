@@ -10,6 +10,7 @@ dynamic = ["dependencies"]
 git-sync = "git_sync:main"
 
 [tool.mypy]
+files = ["git_sync", "tests"]
 python_version = "3.12"
 strict = true
 
