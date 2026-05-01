@@ -5,6 +5,8 @@ import pytest
 
 from git_sync.github import PullRequest, Repository, fetch_pull_requests_from_domain
 
+MOCK_HTTP_CONFIG = "git_sync.github.get_http_config"
+
 TWO_REPOS = [
     Repository(domain="github.com", owner="owner1", name="repo1"),
     Repository(domain="github.com", owner="owner2", name="repo2"),
@@ -24,12 +26,24 @@ def graphql_client() -> Iterator[Mock]:
 
 
 @pytest.fixture(autouse=True)
-def client_session() -> Iterator[Mock]:
+def http_config() -> Iterator[Mock]:
+    with patch(MOCK_HTTP_CONFIG, new_callable=AsyncMock, return_value={}) as mock:
+        yield mock
+
+
+@pytest.fixture(autouse=True)
+def client_session_factory() -> Iterator[Mock]:
     session = Mock(name="client_session")
     with patch("git_sync.github.client_session") as mock:
         mock.return_value.__aenter__ = AsyncMock(return_value=session)
         mock.return_value.__aexit__ = AsyncMock(return_value=None)
-        yield session
+        yield mock
+
+
+@pytest.fixture(autouse=True)
+def client_session(client_session_factory: Mock) -> Mock:
+    session: Mock = client_session_factory.return_value.__aenter__.return_value
+    return session
 
 
 async def test_successful_fetch_with_multiple_repos_and_prs(
@@ -243,3 +257,33 @@ async def test_graphql_errors(graphql_client: Mock) -> None:
     with pytest.raises(RuntimeError, match="GraphQL query failed:"):
         async for _ in fetch_pull_requests_from_domain(Mock(), Mock(), TWO_REPOS):
             pass
+
+
+async def test_git_config_proxy_passed_to_session(
+    http_config: Mock, client_session_factory: Mock
+) -> None:
+    http_config.return_value = {
+        "http.proxy": "http://proxy:8080",
+        "http.sslcainfo": "/path/to/ca.pem",
+    }
+
+    async for _ in fetch_pull_requests_from_domain(
+        "test-token", "github.com", TWO_REPOS
+    ):
+        pass
+
+    http_config.assert_called_once_with("https://github.com")
+    client_session_factory.assert_called_once_with(
+        proxy="http://proxy:8080", ssl_ca_info="/path/to/ca.pem"
+    )
+
+
+async def test_git_config_no_proxy_passed_as_none(
+    client_session_factory: Mock,
+) -> None:
+    async for _ in fetch_pull_requests_from_domain(
+        "test-token", "github.com", TWO_REPOS
+    ):
+        pass
+
+    client_session_factory.assert_called_once_with(proxy=None, ssl_ca_info=None)
