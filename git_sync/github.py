@@ -1,6 +1,7 @@
 import re
 import ssl
 from asyncio import Semaphore, gather
+from asyncio.subprocess import PIPE, create_subprocess_exec
 from collections.abc import AsyncIterator, Callable, Iterable, Iterator
 from dataclasses import dataclass
 from typing import Any, TypeVar
@@ -104,10 +105,33 @@ def join_queries(queries: Iterable[str]) -> str:
     return "{" + "\n".join(f"q{i}: {query}" for i, query in enumerate(queries)) + "}"
 
 
-def client_session() -> aiohttp.ClientSession:
+async def get_http_config(url: str) -> dict[str, str]:
+    """Read git http.* config applicable to the given URL.
+
+    Uses --get-urlmatch to respect domain-specific overrides.
+    """
+    proc = await create_subprocess_exec(
+        "git", "config", "--get-urlmatch", "http", url, stdout=PIPE
+    )
+    assert proc.stdout
+    raw = await proc.stdout.read()
+    await proc.wait()
+    result: dict[str, str] = {}
+    for line in raw.rstrip(b"\r\n").splitlines():
+        key, _, value = line.partition(b" ")
+        result[key.decode("ascii").lower()] = value.decode()
+    return result
+
+
+def client_session(
+    *, proxy: str | None = None, ssl_ca_info: str | None = None
+) -> aiohttp.ClientSession:
     """Configure aiohttp to trust local SSL credentials and environment variables."""
-    connector = aiohttp.TCPConnector(ssl=truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT))
-    return aiohttp.ClientSession(trust_env=True, connector=connector)
+    ssl_context = truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    if ssl_ca_info:
+        ssl_context.load_verify_locations(cafile=ssl_ca_info)
+    connector = aiohttp.TCPConnector(ssl=ssl_context)
+    return aiohttp.ClientSession(trust_env=True, connector=connector, proxy=proxy)
 
 
 def repo_urls(pr_data: dict[str, Any]) -> Iterator[str]:
@@ -128,7 +152,11 @@ async def fetch_pull_requests_from_domain(
         else f"https://{domain}/api/graphql"
     )
 
-    async with client_session() as session:
+    http_config = await get_http_config(f"https://{domain}")
+    proxy = http_config.get("http.proxy")
+    ssl_ca_info = http_config.get("http.sslcainfo")
+
+    async with client_session(proxy=proxy, ssl_ca_info=ssl_ca_info) as session:
         client = GraphQLClient(
             endpoint=endpoint,
             headers={"Authorization": f"Bearer {token}"},

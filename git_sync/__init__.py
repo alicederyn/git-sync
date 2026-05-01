@@ -18,7 +18,7 @@ from .github import fetch_pull_requests, repos_by_domain
 
 
 def github_token_envvar(domain: str) -> str:
-    return domain.split(".")[0].upper() + "_TOKEN"
+    return domain.split(".", maxsplit=1)[0].upper() + "_TOKEN"
 
 
 def github_token(domain: str) -> str | None:

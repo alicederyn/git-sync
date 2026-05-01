@@ -1,6 +1,6 @@
 [project]
 name = "git-sync"
-version = "0.4.3"
+version = "0.5.0"
 description = "Synchronize local git repo with remotes"
 authors = [{ name = "Alice Purcell", email = "alicederyn@gmail.com" }]
 requires-python = ">= 3.12"
@@ -10,6 +10,7 @@ dynamic = ["dependencies"]
 git-sync = "git_sync:main"
 
 [tool.mypy]
+files = ["git_sync", "tests"]
 python_version = "3.12"
 strict = true
 
