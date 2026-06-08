@@ -8,7 +8,7 @@ from typing import Any, TypeVar
 
 import aiohttp
 import truststore
-from aiographql.client import GraphQLClient  # type: ignore[import-untyped]
+from aiographql.client import GraphQLClient
 
 T = TypeVar("T")
 

@@ -1,2 +1,2 @@
-aiographql-client >= 1.0.3
+aiographql-client[aiohttp] >= 1.2.0
 truststore >= 0.10.1
