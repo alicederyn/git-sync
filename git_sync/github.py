@@ -3,7 +3,7 @@ import ssl
 from asyncio import Semaphore, gather
 from asyncio.subprocess import PIPE, create_subprocess_exec
 from collections.abc import AsyncIterator, Callable, Iterable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, TypeVar
 
 import aiohttp
@@ -62,14 +62,41 @@ class PullRequest:
     """The commit hash of the PR merge commit, if it exists."""
 
 
-def pr_initial_query(owner: str, name: str) -> str:
+COMMITS_PAGE_SIZE = 100
+"""Maximum records github.com permits on a single connection."""
+
+
+def commits_query(*, before: str | None = None) -> str:
+    cursor_arg = f', before: "{before}"' if before else ""
+    return f"""
+        commits (last: {COMMITS_PAGE_SIZE}{cursor_arg}) {{
+            nodes {{
+                commit {{
+                    oid
+                }}
+            }}
+            pageInfo {{
+                hasPreviousPage
+                startCursor
+            }}
+        }}
+    """
+
+
+def pr_query(owner: str, name: str) -> str:
     return f"""
         repository(owner: "{owner}", name: "{name}" ) {{
             pullRequests(orderBy: {{ field: UPDATED_AT, direction: ASC }}, last: 50) {{
                 nodes {{
                     id
-                    commits (last: 1) {{
-                        totalCount
+                    headRefName
+                    headRepository {{
+                        sshUrl
+                        url
+                    }}
+                    {commits_query()}
+                    mergeCommit {{
+                        oid
                     }}
                 }}
             }}
@@ -77,25 +104,11 @@ def pr_initial_query(owner: str, name: str) -> str:
     """
 
 
-def pr_details_query(pr_node_id: str, commit_count: int) -> str:
+def pr_commits_page_query(pr_node_id: str, before: str) -> str:
     return f"""
         node(id: "{pr_node_id}") {{
             ... on PullRequest {{
-                headRefName
-                headRepository {{
-                    sshUrl
-                    url
-                }}
-                commits (last: {commit_count}) {{
-                    nodes {{
-                        commit {{
-                            oid
-                        }}
-                    }}
-                }}
-                mergeCommit {{
-                    oid
-                }}
+                {commits_query(before=before)}
             }}
         }}
     """
@@ -103,6 +116,16 @@ def pr_details_query(pr_node_id: str, commit_count: int) -> str:
 
 def join_queries(queries: Iterable[str]) -> str:
     return "{" + "\n".join(f"q{i}: {query}" for i, query in enumerate(queries)) + "}"
+
+
+async def run_queries(
+    client: GraphQLClient, queries: list[str]
+) -> list[dict[str, Any]]:
+    response = await client.query(join_queries(queries))
+    if response.errors:
+        msg = f"GraphQL query failed: {response.errors}"
+        raise RuntimeError(msg)
+    return [response.data[f"q{i}"] for i in range(len(queries))]
 
 
 async def get_http_config(url: str) -> dict[str, str]:
@@ -143,6 +166,65 @@ def repo_urls(pr_data: dict[str, Any]) -> Iterator[str]:
         yield http_url + ".git"
 
 
+@dataclass
+class PartialPullRequest:
+    """A pull request whose commit list may not have been fully fetched yet."""
+
+    node_id: str
+    branch_name: str
+    repo_urls: frozenset[str]
+    merged_hash: str | None
+    oids: list[str] = field(default_factory=list)
+    """Commits fetched so far, oldest first."""
+    cursor: str | None = None
+    """Where to resume from, if older commits remain unfetched."""
+
+    def add_page(self, commits: dict[str, Any]) -> None:
+        """Prepend a page of commits, which are older than any already fetched."""
+        nodes = commits["nodes"]
+        self.oids[:0] = [node["commit"]["oid"] for node in nodes]
+        page_info = commits["pageInfo"]
+        # An empty page would leave the cursor unchanged, so stop to avoid looping
+        self.cursor = (
+            page_info["startCursor"] if nodes and page_info["hasPreviousPage"] else None
+        )
+
+    def to_pull_request(self) -> PullRequest:
+        return PullRequest(
+            branch_name=self.branch_name,
+            repo_urls=self.repo_urls,
+            hashes=tuple(reversed(self.oids)),
+            merged_hash=self.merged_hash,
+        )
+
+
+def partial_pull_request(pr_data: dict[str, Any]) -> PartialPullRequest:
+    pr = PartialPullRequest(
+        node_id=pr_data["id"],
+        branch_name=pr_data["headRefName"],
+        repo_urls=frozenset(repo_urls(pr_data)),
+        merged_hash=(pr_data.get("mergeCommit") or {}).get("oid"),
+    )
+    pr.add_page(pr_data["commits"])
+    return pr
+
+
+async def fetch_remaining_commits(
+    client: GraphQLClient, prs: Iterable[PartialPullRequest]
+) -> None:
+    """Page backwards through the commits of any PR with more than one page."""
+    pending = [pr for pr in prs if pr.cursor]
+    while pending:
+        queries = []
+        for pr in pending:
+            assert pr.cursor
+            queries.append(pr_commits_page_query(pr.node_id, pr.cursor))
+        pages = await run_queries(client, queries)
+        for pr, page_data in zip(pending, pages, strict=True):
+            pr.add_page(page_data["commits"])
+        pending = [pr for pr in pending if pr.cursor]
+
+
 async def fetch_pull_requests_from_domain(
     token: str, domain: str, repos: list[Repository]
 ) -> AsyncIterator[PullRequest]:
@@ -163,44 +245,17 @@ async def fetch_pull_requests_from_domain(
             session=session,
         )
 
-        # Query for PRs and commit counts
-        initial_queries = [
-            pr_initial_query(repo.owner, repo.name) for i, repo in enumerate(repos, 1)
-        ]
-        initial_response = await client.query(join_queries(initial_queries))
-        if initial_response.errors:
-            msg = f"GraphQL query failed: {initial_response.errors}"
-            raise RuntimeError(msg)
-
-        # Determine what follow-up queries to make
-        details_queries = [
-            pr_details_query(pr_data["id"], pr_data["commits"]["totalCount"])
-            for repo_data in initial_response.data.values()
+        queries = [pr_query(repo.owner, repo.name) for repo in repos]
+        prs = [
+            partial_pull_request(pr_data)
+            for repo_data in await run_queries(client, queries)
             for pr_data in repo_data["pullRequests"]["nodes"]
         ]
 
-        # If there are no PRs, make no follow-up query
-        if not details_queries:
-            return
+        await fetch_remaining_commits(client, prs)
 
-        # Query for detailed PR information
-        details_response = await client.query(join_queries(details_queries))
-        if details_response.errors:
-            msg = f"GraphQL query failed: {details_response.errors}"
-            raise RuntimeError(msg)
-
-        # Yield response data as PullRequest objects
-        for pr_data in details_response.data.values():
-            hashes = tuple(
-                commit["commit"]["oid"]
-                for commit in reversed(pr_data["commits"]["nodes"])
-            )
-            yield PullRequest(
-                branch_name=pr_data["headRefName"],
-                repo_urls=frozenset(repo_urls(pr_data)),
-                hashes=hashes,
-                merged_hash=(pr_data.get("mergeCommit") or {}).get("oid"),
-            )
+        for pr in prs:
+            yield pr.to_pull_request()
 
 
 async def fetch_pull_requests(

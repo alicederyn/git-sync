@@ -17,7 +17,10 @@ TWO_REPOS = [
 def graphql_client() -> Iterator[Mock]:
     mock_client = AsyncMock(name="graphql-client")
     mock_client.query.return_value = Mock(
-        data={"q0": {"pullRequests": {"nodes": []}}},
+        data={
+            "q0": {"pullRequests": {"nodes": []}},
+            "q1": {"pullRequests": {"nodes": []}},
+        },
         errors=None,
     )
     with patch("git_sync.github.GraphQLClient") as mock:
@@ -46,77 +49,66 @@ def client_session(client_session_factory: Mock) -> Mock:
     return session
 
 
+def commits(*oids: str, has_previous_page: bool = False) -> dict[str, object]:
+    return {
+        "nodes": [{"commit": {"oid": oid}} for oid in oids],
+        "pageInfo": {
+            "hasPreviousPage": has_previous_page,
+            "startCursor": f"cursor-{oids[0]}" if oids else None,
+        },
+    }
+
+
 async def test_successful_fetch_with_multiple_repos_and_prs(
     graphql_client: Mock,
 ) -> None:
     """Test successful fetching of PRs from multiple repositories."""
-    initial_data = {
+    pr_data = {
         "q0": {
             "pullRequests": {
                 "nodes": [
-                    {"id": "pr1", "commits": {"totalCount": 3}},
-                    {"id": "pr2", "commits": {"totalCount": 1}},
+                    {
+                        "id": "pr1",
+                        "headRefName": "feature-branch-1",
+                        "headRepository": {
+                            "sshUrl": "git@github.com:owner1/repo1.git",
+                            "url": "https://github.com/owner1/repo1",
+                        },
+                        "commits": commits("commit1", "commit2", "commit3"),
+                        "mergeCommit": {"oid": "merge1"},
+                    },
+                    {
+                        "id": "pr2",
+                        "headRefName": "feature-branch-2",
+                        "headRepository": {
+                            "sshUrl": "git@github.com:owner1/repo1.git",
+                            "url": "https://github.com/owner1/repo1",
+                        },
+                        "commits": commits("commit4"),
+                        "mergeCommit": None,
+                    },
                 ]
             }
         },
         "q1": {
             "pullRequests": {
                 "nodes": [
-                    {"id": "pr3", "commits": {"totalCount": 2}},
+                    {
+                        "id": "pr3",
+                        "headRefName": "feature-branch-3",
+                        "headRepository": {
+                            "sshUrl": "git@github.com:owner2/repo2.git",
+                            "url": "https://github.com/owner2/repo2",
+                        },
+                        "commits": commits("commit5", "commit6"),
+                        "mergeCommit": {"oid": "merge2"},
+                    },
                 ]
             }
         },
     }
 
-    details_data = {
-        "q0": {
-            "headRefName": "feature-branch-1",
-            "headRepository": {
-                "sshUrl": "git@github.com:owner1/repo1.git",
-                "url": "https://github.com/owner1/repo1",
-            },
-            "commits": {
-                "nodes": [
-                    {"commit": {"oid": "commit1"}},
-                    {"commit": {"oid": "commit2"}},
-                    {"commit": {"oid": "commit3"}},
-                ]
-            },
-            "mergeCommit": {"oid": "merge1"},
-        },
-        "q1": {
-            "headRefName": "feature-branch-2",
-            "headRepository": {
-                "sshUrl": "git@github.com:owner1/repo1.git",
-                "url": "https://github.com/owner1/repo1",
-            },
-            "commits": {
-                "nodes": [
-                    {"commit": {"oid": "commit4"}},
-                ]
-            },
-            "mergeCommit": None,
-        },
-        "q2": {
-            "headRefName": "feature-branch-3",
-            "headRepository": {
-                "sshUrl": "git@github.com:owner2/repo2.git",
-                "url": "https://github.com/owner2/repo2",
-            },
-            "commits": {
-                "nodes": [
-                    {"commit": {"oid": "commit5"}},
-                    {"commit": {"oid": "commit6"}},
-                ]
-            },
-            "mergeCommit": {"oid": "merge2"},
-        },
-    }
-
-    graphql_client.return_value.query.side_effect = [
-        Mock(data=initial_data, errors=None),
-        Mock(data=details_data, errors=None),
-    ]
+    graphql_client.return_value.query.return_value = Mock(data=pr_data, errors=None)
 
     # Execute the function
     result = []
@@ -213,33 +205,23 @@ async def test_no_pull_requests_found(graphql_client: Mock) -> None:
 
 async def test_pr_without_head_repository(graphql_client: Mock) -> None:
     """Test handling of PR without head repository (e.g. from deleted fork)."""
-    initial_data = {
+    pr_data = {
         "q0": {
             "pullRequests": {
                 "nodes": [
-                    {"id": "pr1", "commits": {"totalCount": 1}},
+                    {
+                        "id": "pr1",
+                        "headRefName": "feature-branch",
+                        "headRepository": None,  # Deleted repository
+                        "commits": commits("commit1"),
+                        "mergeCommit": None,
+                    },
                 ]
             }
         },
     }
 
-    details_data = {
-        "q0": {
-            "headRefName": "feature-branch",
-            "headRepository": None,  # Deleted repository
-            "commits": {
-                "nodes": [
-                    {"commit": {"oid": "commit1"}},
-                ]
-            },
-            "mergeCommit": None,
-        },
-    }
-
-    graphql_client.return_value.query.side_effect = [
-        Mock(data=initial_data, errors=None),
-        Mock(data=details_data, errors=None),
-    ]
+    graphql_client.return_value.query.return_value = Mock(data=pr_data, errors=None)
 
     result = []
     async for pr in fetch_pull_requests_from_domain(Mock(), Mock(), [TWO_REPOS[0]]):
@@ -249,6 +231,67 @@ async def test_pr_without_head_repository(graphql_client: Mock) -> None:
     assert len(result) == 1
     assert result[0].repo_urls == frozenset()
     assert result[0].branch_name == "feature-branch"
+
+
+def one_pr_with_commits(commits: dict[str, object]) -> dict[str, object]:
+    return {
+        "q0": {
+            "pullRequests": {
+                "nodes": [
+                    {
+                        "id": "pr1",
+                        "headRefName": "feature-branch",
+                        "headRepository": None,
+                        "commits": commits,
+                        "mergeCommit": {"oid": "merge1"},
+                    },
+                ]
+            }
+        },
+    }
+
+
+async def test_commits_paginated_over_multiple_pages(graphql_client: Mock) -> None:
+    graphql_client.return_value.query.side_effect = [
+        Mock(
+            data=one_pr_with_commits(
+                commits("commit3", "commit4", has_previous_page=True)
+            ),
+            errors=None,
+        ),
+        Mock(
+            data={"q0": {"commits": commits("commit1", "commit2")}},
+            errors=None,
+        ),
+    ]
+
+    result = [
+        pr
+        async for pr in fetch_pull_requests_from_domain(Mock(), Mock(), [TWO_REPOS[0]])
+    ]
+
+    assert len(result) == 1
+    assert result[0].hashes == ("commit4", "commit3", "commit2", "commit1")
+    assert graphql_client.return_value.query.call_count == 2
+
+
+async def test_pagination_stops_on_empty_page(graphql_client: Mock) -> None:
+    """An empty page cannot advance the cursor, so paging must stop regardless."""
+    graphql_client.return_value.query.side_effect = [
+        Mock(
+            data=one_pr_with_commits(commits("commit1", has_previous_page=True)),
+            errors=None,
+        ),
+        Mock(data={"q0": {"commits": commits(has_previous_page=True)}}, errors=None),
+    ]
+
+    result = [
+        pr
+        async for pr in fetch_pull_requests_from_domain(Mock(), Mock(), [TWO_REPOS[0]])
+    ]
+
+    assert result[0].hashes == ("commit1",)
+    assert graphql_client.return_value.query.call_count == 2
 
 
 async def test_graphql_errors(graphql_client: Mock) -> None:
