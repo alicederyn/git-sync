@@ -74,6 +74,8 @@ async def test_successful_fetch_with_multiple_repos_and_prs(
                             "sshUrl": "git@github.com:owner1/repo1.git",
                             "url": "https://github.com/owner1/repo1",
                         },
+                        "headRef": {"target": {"oid": "commit3"}},
+                        "isCrossRepository": True,
                         "commits": commits("commit1", "commit2", "commit3"),
                         "mergeCommit": {"oid": "merge1"},
                     },
@@ -84,6 +86,8 @@ async def test_successful_fetch_with_multiple_repos_and_prs(
                             "sshUrl": "git@github.com:owner1/repo1.git",
                             "url": "https://github.com/owner1/repo1",
                         },
+                        "headRef": {"target": {"oid": "commit4"}},
+                        "isCrossRepository": False,
                         "commits": commits("commit4"),
                         "mergeCommit": None,
                     },
@@ -100,6 +104,8 @@ async def test_successful_fetch_with_multiple_repos_and_prs(
                             "sshUrl": "git@github.com:owner2/repo2.git",
                             "url": "https://github.com/owner2/repo2",
                         },
+                        "headRef": None,  # Branch deleted on merge
+                        "isCrossRepository": True,
                         "commits": commits("commit5", "commit6"),
                         "mergeCommit": {"oid": "merge2"},
                     },
@@ -130,6 +136,8 @@ async def test_successful_fetch_with_multiple_repos_and_prs(
         ),
         hashes=("commit3", "commit2", "commit1"),  # Newest first
         merged_hash="merge1",
+        head_hash="commit3",
+        is_cross_repository=True,
     )
 
     # Second PR - without merge commit
@@ -144,6 +152,8 @@ async def test_successful_fetch_with_multiple_repos_and_prs(
         ),
         hashes=("commit4",),
         merged_hash=None,
+        head_hash="commit4",
+        is_cross_repository=False,
     )
 
     # Third PR - from different repo
@@ -158,6 +168,8 @@ async def test_successful_fetch_with_multiple_repos_and_prs(
         ),
         hashes=("commit6", "commit5"),
         merged_hash="merge2",
+        head_hash=None,
+        is_cross_repository=True,
     )
 
 
