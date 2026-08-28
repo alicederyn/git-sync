@@ -60,6 +60,10 @@ class PullRequest:
     """All commits pushed to the PR, newest first."""
     merged_hash: str | None
     """The commit hash of the PR merge commit, if it exists."""
+    head_hash: str | None = None
+    """The current commit hash of the PR branch, or None if it has been deleted."""
+    is_cross_repository: bool = False
+    """Whether the PR branch is in a different repository to the PR target."""
 
 
 COMMITS_PAGE_SIZE = 100
@@ -94,6 +98,12 @@ def pr_query(owner: str, name: str) -> str:
                         sshUrl
                         url
                     }}
+                    headRef {{
+                        target {{
+                            oid
+                        }}
+                    }}
+                    isCrossRepository
                     {commits_query()}
                     mergeCommit {{
                         oid
@@ -174,6 +184,8 @@ class PartialPullRequest:
     branch_name: str
     repo_urls: frozenset[str]
     merged_hash: str | None
+    head_hash: str | None = None
+    is_cross_repository: bool = False
     oids: list[str] = field(default_factory=list)
     """Commits fetched so far, oldest first."""
     cursor: str | None = None
@@ -195,6 +207,8 @@ class PartialPullRequest:
             repo_urls=self.repo_urls,
             hashes=tuple(reversed(self.oids)),
             merged_hash=self.merged_hash,
+            head_hash=self.head_hash,
+            is_cross_repository=self.is_cross_repository,
         )
 
 
@@ -204,6 +218,8 @@ def partial_pull_request(pr_data: dict[str, Any]) -> PartialPullRequest:
         branch_name=pr_data["headRefName"],
         repo_urls=frozenset(repo_urls(pr_data)),
         merged_hash=(pr_data.get("mergeCommit") or {}).get("oid"),
+        head_hash=((pr_data.get("headRef") or {}).get("target") or {}).get("oid"),
+        is_cross_repository=bool(pr_data.get("isCrossRepository")),
     )
     pr.add_page(pr_data["commits"])
     return pr

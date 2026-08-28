@@ -208,3 +208,39 @@ async def update_merged_prs(
                 merged_hash=merged_hash,
                 allow_delete=allow_delete,
             )
+
+
+def is_stale_merged_fork_branch(pr: PullRequest, push_remote_url: str) -> bool:
+    """Return true if the PR branch is in our fork and unchanged since the merge.
+
+    Restricted to cross-repository PRs so that we never delete a branch from a
+    repository shared with colleagues.
+    """
+    return (
+        pr.merged_hash is not None
+        and pr.is_cross_repository
+        and push_remote_url in pr.repo_urls
+        and bool(pr.hashes)
+        and pr.head_hash == pr.hashes[0]
+    )
+
+
+async def delete_merged_remote_branches(
+    push_remote: bytes, push_remote_url: str, prs: Iterable[PullRequest]
+) -> None:
+    """Delete branches of merged PRs from our fork.
+
+    GitHub is normally configured to do this on merge, but not every merge respects
+    that setting.
+    """
+    branch_names = [
+        pr.branch_name for pr in prs if is_stale_merged_fork_branch(pr, push_remote_url)
+    ]
+    if not branch_names:
+        return
+    remote = push_remote.decode()
+    for branch_name in branch_names:
+        print(f"Deleting {branch_name} from {remote}")
+    # A branch may have been deleted since we queried the API; git will report
+    # any failures itself, and the rest of the deletions still apply
+    await git("push", push_remote, "--delete", *branch_names, check_return=False)

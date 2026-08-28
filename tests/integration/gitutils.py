@@ -78,6 +78,29 @@ def setup_upstreams(**upstreams: str) -> None:
         )
 
 
+def setup_remote(name: str, **branches: str) -> None:
+    """Create a bare repository as a remote, with the given branches pushed to it."""
+    remote_path = Path.cwd().parent / name
+    subprocess.run(["git", "init", "--bare", "-q", str(remote_path)], check=True)
+    subprocess.run(["git", "remote", "add", name, str(remote_path)], check=True)
+    for branch_name, commit_hash in branches.items():
+        subprocess.run(
+            ["git", "push", "-q", name, f"{commit_hash}:refs/heads/{branch_name}"],
+            check=True,
+        )
+    subprocess.run(["git", "fetch", "-q", name], check=True)
+
+
+def remote_branches(name: str) -> dict[str, str]:
+    lines = run_split_stdout(
+        ["git", "ls-remote", "--heads", name],
+    )
+    return {
+        ref.removeprefix("refs/heads/"): commit_hash
+        for commit_hash, ref in (line.split("\t") for line in lines)
+    }
+
+
 def all_branches() -> dict[str, str]:
     return {
         branch_name: subprocess.run(

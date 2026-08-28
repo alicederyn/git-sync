@@ -6,6 +6,7 @@ from os import environ
 from .git import (
     GitError,
     Remote,
+    delete_merged_remote_branches,
     fast_forward_to_downstream,
     fetch_and_fast_forward_to_upstream,
     get_branches_with_remote_upstreams,
@@ -39,7 +40,7 @@ def get_description(
     description += "\nPulls all remotes, including updating the current branch if safe."
     if push_remote and any(remote.name != push_remote for remote in remotes):
         description += f"\nPushes any upstream changes to {push_remote.decode()}."
-    if domains:
+    if domains and push_remote:
         domains_with_tokens = sorted(
             domain for domain in domains if github_token(domain)
         )
@@ -49,6 +50,8 @@ def get_description(
         if domains_with_tokens:
             description += (
                 "\nMerged PR branches will be fast-forwarded or, if safe, deleted."
+                f"\nMerged fork branches will be deleted from {push_remote.decode()}"
+                " if unchanged since the merge."
             )
         if domains_without_tokens:
             description += "\n"
@@ -122,6 +125,10 @@ async def git_sync() -> None:
             await update_merged_prs(
                 push_remote_url, pull_requests, allow_delete=args.allow_delete
             )
+            if args.allow_delete:
+                await delete_merged_remote_branches(
+                    push_remote, push_remote_url, pull_requests
+                )
 
 
 def main() -> None:

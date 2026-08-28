@@ -6,6 +6,7 @@ Utility script that synchronizes a local repository with all remotes:
  - fast-forwards all local branches that have a remote upstream
  - pushes upstream changes to the default push remote
  - fast-forwards or deletes branches associated with merged PRs to the merge commit
+ - deletes merged fork branches from your push remote if they are unchanged since the merge
 
 Not all git configuration is taken into account; please open an issue if this causes problems.
 
@@ -26,6 +27,8 @@ Git understands merge commits and handles them nicely. For instance, if a branch
 Squash commits break this model, as they deliberately do not record the information git needs to determine that a branch commit is in the history of main. This means having to do `branch -D` and risking mistakenly deleting unmerged commits if you have misremembered which branches have merged.
 
 If you have `remote.pushdefault` set and `$GITHUB_TOKEN` in your environment, `git sync` will query the last 50 PRs from each remote, and if it finds a merge commit for a local branch, will fast-forward that branch to the merge commit. This gives git enough information to reenable the safer workflows.
+
+GitHub can be configured to delete the PR branch on merge, but not everything that merges PRs respects that setting. `git sync` will delete any leftover merged PR branch from your push remote, provided the branch is still at the commit it was merged at, and the PR was raised from a fork (that is, the branch is in your own repository, not one shared with colleagues).
 
 
 ## Installing
