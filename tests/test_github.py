@@ -59,6 +59,14 @@ def commits(*oids: str, has_previous_page: bool = False) -> dict[str, object]:
     }
 
 
+def force_pushes(*before_oids: str | None) -> dict[str, object]:
+    return {
+        "nodes": [
+            {"beforeCommit": {"oid": oid} if oid else None} for oid in before_oids
+        ]
+    }
+
+
 async def test_successful_fetch_with_multiple_repos_and_prs(
     graphql_client: Mock,
 ) -> None:
@@ -78,6 +86,7 @@ async def test_successful_fetch_with_multiple_repos_and_prs(
                         "isCrossRepository": True,
                         "commits": commits("commit1", "commit2", "commit3"),
                         "mergeCommit": {"oid": "merge1"},
+                        "timelineItems": force_pushes(),
                     },
                     {
                         "id": "pr2",
@@ -90,6 +99,7 @@ async def test_successful_fetch_with_multiple_repos_and_prs(
                         "isCrossRepository": False,
                         "commits": commits("commit4"),
                         "mergeCommit": None,
+                        "timelineItems": force_pushes(),
                     },
                 ]
             }
@@ -108,6 +118,7 @@ async def test_successful_fetch_with_multiple_repos_and_prs(
                         "isCrossRepository": True,
                         "commits": commits("commit5", "commit6"),
                         "mergeCommit": {"oid": "merge2"},
+                        "timelineItems": force_pushes(),
                     },
                 ]
             }
@@ -227,6 +238,7 @@ async def test_pr_without_head_repository(graphql_client: Mock) -> None:
                         "headRepository": None,  # Deleted repository
                         "commits": commits("commit1"),
                         "mergeCommit": None,
+                        "timelineItems": force_pushes(),
                     },
                 ]
             }
@@ -245,7 +257,11 @@ async def test_pr_without_head_repository(graphql_client: Mock) -> None:
     assert result[0].branch_name == "feature-branch"
 
 
-def one_pr_with_commits(commits: dict[str, object]) -> dict[str, object]:
+def one_pr_with_commits(
+    commits: dict[str, object],
+    *,
+    timeline_items: dict[str, object] | None = None,
+) -> dict[str, object]:
     return {
         "q0": {
             "pullRequests": {
@@ -256,11 +272,27 @@ def one_pr_with_commits(commits: dict[str, object]) -> dict[str, object]:
                         "headRepository": None,
                         "commits": commits,
                         "mergeCommit": {"oid": "merge1"},
+                        "timelineItems": timeline_items or force_pushes(),
                     },
                 ]
             }
         },
     }
+
+
+async def test_pr_superseded_heads(graphql_client: Mock) -> None:
+    pr_data = one_pr_with_commits(
+        commits("commit3"),
+        timeline_items=force_pushes("commit1", None, "commit2"),
+    )
+    graphql_client.return_value.query.return_value = Mock(data=pr_data, errors=None)
+
+    result = [
+        pr
+        async for pr in fetch_pull_requests_from_domain(Mock(), Mock(), [TWO_REPOS[0]])
+    ]
+
+    assert result[0].superseded_heads == frozenset(["commit1", "commit2"])
 
 
 async def test_commits_paginated_over_multiple_pages(graphql_client: Mock) -> None:

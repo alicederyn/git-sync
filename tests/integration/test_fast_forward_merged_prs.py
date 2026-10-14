@@ -288,3 +288,29 @@ async def test_no_fastforward_when_branch_has_additional_commits() -> None:
         "main": commit_d,
         "my_pr": commit_c,
     }
+
+
+async def test_fastforward_when_branch_is_at_superseded_pr_head() -> None:
+    # Given a merged PR that was rebased on GitHub before merging
+    commit_a = create_commit("main", file="A\n")
+    commit_b = create_commit(commit_a, file="B\n")
+    commit_c = create_commit(commit_a, other="C\n")
+    commit_d = create_commit(commit_c, file="B\n")
+    commit_e = squash_merge(commit_c, commit_d)
+    setup_branches(main=commit_e, my_pr=commit_b, active_branch="main")
+    pr = PullRequest(
+        branch_name="my_pr",
+        repo_urls=frozenset([REPO_URL]),
+        hashes=(commit_d,),
+        merged_hash=commit_e,
+        superseded_heads=frozenset([commit_b]),
+    )
+
+    # When we update merged PRs
+    await update_merged_prs(REPO_URL, [pr], allow_delete=False)
+
+    # Then the PR branch is fast-forwarded to the merged commit
+    assert all_branches() == {
+        "main": commit_e,
+        "my_pr": commit_e,
+    }

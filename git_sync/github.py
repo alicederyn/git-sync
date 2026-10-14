@@ -57,13 +57,15 @@ class PullRequest:
     repo_urls: frozenset[str]
     """Git and SSH URLs of the repository where the PR is located."""
     hashes: tuple[str, ...]
-    """All commits pushed to the PR, newest first."""
+    """Commits in the current PR head, newest first."""
     merged_hash: str | None
     """The commit hash of the PR merge commit, if it exists."""
     head_hash: str | None = None
     """The current commit hash of the PR branch, or None if it has been deleted."""
     is_cross_repository: bool = False
     """Whether the PR branch is in a different repository to the PR target."""
+    superseded_heads: frozenset[str] = frozenset()
+    """Previous PR heads, replaced by force-pushes (e.g. rebasing onto main)."""
 
 
 COMMITS_PAGE_SIZE = 100
@@ -107,6 +109,17 @@ def pr_query(owner: str, name: str) -> str:
                     {commits_query()}
                     mergeCommit {{
                         oid
+                    }}
+                    timelineItems(
+                        itemTypes: [HEAD_REF_FORCE_PUSHED_EVENT], last: 100
+                    ) {{
+                        nodes {{
+                            ... on HeadRefForcePushedEvent {{
+                                beforeCommit {{
+                                    oid
+                                }}
+                            }}
+                        }}
                     }}
                 }}
             }}
@@ -184,6 +197,7 @@ class PartialPullRequest:
     branch_name: str
     repo_urls: frozenset[str]
     merged_hash: str | None
+    superseded_heads: frozenset[str]
     head_hash: str | None = None
     is_cross_repository: bool = False
     oids: list[str] = field(default_factory=list)
@@ -209,7 +223,14 @@ class PartialPullRequest:
             merged_hash=self.merged_hash,
             head_hash=self.head_hash,
             is_cross_repository=self.is_cross_repository,
+            superseded_heads=self.superseded_heads,
         )
+
+
+def superseded_heads(pr_data: dict[str, Any]) -> Iterator[str]:
+    for event in pr_data["timelineItems"]["nodes"]:
+        if before_commit := event.get("beforeCommit"):
+            yield before_commit["oid"]
 
 
 def partial_pull_request(pr_data: dict[str, Any]) -> PartialPullRequest:
@@ -220,6 +241,7 @@ def partial_pull_request(pr_data: dict[str, Any]) -> PartialPullRequest:
         merged_hash=(pr_data.get("mergeCommit") or {}).get("oid"),
         head_hash=((pr_data.get("headRef") or {}).get("target") or {}).get("oid"),
         is_cross_repository=bool(pr_data.get("isCrossRepository")),
+        superseded_heads=frozenset(superseded_heads(pr_data)),
     )
     pr.add_page(pr_data["commits"])
     return pr
