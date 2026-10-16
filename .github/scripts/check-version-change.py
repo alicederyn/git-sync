@@ -32,7 +32,7 @@ def fetch_pr_labels() -> set[str]:
         url=os.environ["GITHUB_GRAPHQL_URL"],
         headers={"Authorization": f"Bearer {GITHUB_TOKEN}"},
     )
-    client = Client(transport=transport, fetch_schema_from_transport=True)
+    client = Client(transport=transport, fetch_schema_from_transport=False)
     result = client.execute(
         gql(
             """

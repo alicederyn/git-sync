@@ -14,6 +14,7 @@ from .git import (
     get_remotes,
     in_git_repo,
     update_merged_prs,
+    update_rebased_prs,
 )
 from .github import fetch_pull_requests, repos_by_domain
 
@@ -52,6 +53,7 @@ def get_description(
                 "\nMerged PR branches will be fast-forwarded or, if safe, deleted."
                 f"\nMerged fork branches will be deleted from {push_remote.decode()}"
                 " if unchanged since the merge."
+                "\nPR branches rebased on GitHub will be updated to the new PR head."
             )
         if domains_without_tokens:
             description += "\n"
@@ -115,20 +117,20 @@ async def git_sync() -> None:
     await fetch_and_fast_forward_to_upstream(branches)
 
     if push_remote:
-        await fast_forward_to_downstream(push_remote, branches)
+        push_remote_url = next(
+            remote.url for remote in remotes if remote.name == push_remote
+        )
+        pull_requests = await pull_request_task if pull_request_task else []
 
-        if pull_request_task is not None:
-            pull_requests = await pull_request_task
-            push_remote_url = next(
-                remote.url for remote in remotes if remote.name == push_remote
+        await update_rebased_prs(push_remote_url, pull_requests)
+        await fast_forward_to_downstream(push_remote, branches)
+        await update_merged_prs(
+            push_remote_url, pull_requests, allow_delete=args.allow_delete
+        )
+        if args.allow_delete:
+            await delete_merged_remote_branches(
+                push_remote, push_remote_url, pull_requests
             )
-            await update_merged_prs(
-                push_remote_url, pull_requests, allow_delete=args.allow_delete
-            )
-            if args.allow_delete:
-                await delete_merged_remote_branches(
-                    push_remote, push_remote_url, pull_requests
-                )
 
 
 def main() -> None:

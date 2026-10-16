@@ -150,6 +150,28 @@ async def branch_is_an_upstream(branch_name: bytes) -> bool:
     return branch_name in upstream_heads
 
 
+async def has_uncommitted_changes(branch_name: bytes) -> bool:
+    """Return true, and print why, if there are staged or unstaged changes."""
+    any_staged_changes = await git_output(
+        "diff", "--cached", "--exit-code", check_return=False
+    )
+    if any_staged_changes:
+        print(f"Staged changes on {branch_name.decode()}, skipping fast-forward")
+        return True
+    any_unstaged_changes_to_committed_files = await git_output(
+        "diff", "--exit-code", check_return=False
+    )
+    if any_unstaged_changes_to_committed_files:
+        print(f"Unstaged changes on {branch_name.decode()}, skipping fast-forward")
+        return True
+    return False
+
+
+async def get_current_branch_name() -> bytes | None:
+    current_branch = await get_current_branch()
+    return current_branch and current_branch[11:]
+
+
 async def update_merged_pr_branch(
     branch_name: bytes,
     merged_hash: str,
@@ -161,20 +183,8 @@ async def update_merged_pr_branch(
     If there are any uncommitted changes on the branch, it will be skipped.
     If the branch is not an upstream of any other branch, it will be deleted.
     """
-    current_branch = await get_current_branch()
-    current_branch = current_branch and current_branch[11:]
-    if current_branch == branch_name:
-        any_staged_changes = await git_output(
-            "diff", "--cached", "--exit-code", check_return=False
-        )
-        if any_staged_changes:
-            print(f"Staged changes on {branch_name.decode()}, skipping fast-forward")
-            return
-        any_unstaged_changes_to_committed_files = await git_output(
-            "diff", "--exit-code", check_return=False
-        )
-        if any_unstaged_changes_to_committed_files:
-            print(f"Unstaged changes on {branch_name.decode()}, skipping fast-forward")
+    if await get_current_branch_name() == branch_name:
+        if await has_uncommitted_changes(branch_name):
             return
         if allow_delete and not await branch_is_an_upstream(branch_name):
             upstream = (await get_upstream_branch(branch_name)) or b"main"
@@ -200,7 +210,10 @@ async def update_merged_prs(
         if (
             merged_hash
             and branch_name in branch_hashes
-            and branch_hashes[branch_name] in pr.hashes
+            and (
+                branch_hashes[branch_name] in pr.hashes
+                or branch_hashes[branch_name] in pr.superseded_heads
+            )
             and push_remote_url in pr.repo_urls
         ):
             await update_merged_pr_branch(
@@ -244,3 +257,41 @@ async def delete_merged_remote_branches(
     # A branch may have been deleted since we queried the API; git will report
     # any failures itself, and the rest of the deletions still apply
     await git("push", push_remote, "--delete", *branch_names, check_return=False)
+
+
+async def commit_exists(commit_hash: str) -> bool:
+    proc = await create_subprocess_exec(
+        "git", "cat-file", "-e", commit_hash + "^{commit}", stderr=DEVNULL
+    )
+    return await proc.wait() == 0
+
+
+async def update_rebased_pr_branch(branch_name: bytes, head_hash: str) -> None:
+    """Move a branch from a superseded PR head to the current PR head.
+
+    If there are any uncommitted changes on the branch, it will be skipped.
+    """
+    if not await commit_exists(head_hash):
+        return
+    if await get_current_branch_name() == branch_name:
+        if await has_uncommitted_changes(branch_name):
+            return
+        await git("reset", "--hard", head_hash)
+    else:
+        await git("branch", "--force", branch_name, head_hash)
+    print(f"Update rebased {branch_name.decode()} to {head_hash}")
+
+
+async def update_rebased_prs(push_remote_url: str, prs: Iterable[PullRequest]) -> None:
+    branch_hashes = await get_branch_hashes()
+    for pr in prs:
+        branch_name = pr.branch_name.encode("utf-8")
+        if (
+            pr.hashes
+            and branch_name in branch_hashes
+            and branch_hashes[branch_name] in pr.superseded_heads
+            and push_remote_url in pr.repo_urls
+        ):
+            await update_rebased_pr_branch(
+                branch_name=branch_name, head_hash=pr.hashes[0]
+            )
