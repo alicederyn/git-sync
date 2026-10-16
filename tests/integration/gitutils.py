@@ -17,6 +17,10 @@ def get_current_branch() -> str:
     )
 
 
+def get_head() -> str:
+    return run_split_stdout(["git", "rev-parse", "HEAD"])[0]
+
+
 def stage_changes(**files: str) -> None:
     for filename, content in files.items():
         Path(filename + ".txt").write_text(content)
@@ -78,6 +82,27 @@ def setup_upstreams(**upstreams: str) -> None:
         )
 
 
+def setup_worktree(name: str, branch_name: str) -> Path:
+    worktree_path = Path.cwd().parent / name
+    subprocess.run(
+        ["git", "worktree", "add", "-q", str(worktree_path), branch_name], check=True
+    )
+    return worktree_path
+
+
+def start_rebase(cwd: Path | None = None) -> None:
+    """Leave a rebase of the checked-out branch in progress, with HEAD detached."""
+    subprocess.run(
+        ["git", "rebase", "-q", "--exec", "false", "HEAD~1"], cwd=cwd, check=False
+    )
+
+
+def start_bisect(cwd: Path | None = None) -> None:
+    """Leave a bisect of the checked-out branch in progress, with HEAD detached."""
+    subprocess.run(["git", "bisect", "start"], cwd=cwd, check=True)
+    subprocess.run(["git", "checkout", "-q", "--detach"], cwd=cwd, check=True)
+
+
 def setup_remote(name: str, **branches: str) -> None:
     """Create a bare repository as a remote, with the given branches pushed to it."""
     remote_path = Path.cwd().parent / name
@@ -110,7 +135,13 @@ def all_branches() -> dict[str, str]:
             encoding="utf-8",
         ).stdout.strip()
         for branch_name in subprocess.run(
-            ["git", "branch", "-a", "--format", "%(refname:short)"],
+            [
+                "git",
+                "for-each-ref",
+                "--format=%(refname:short)",
+                "refs/heads",
+                "refs/remotes",
+            ],
             check=True,
             stdout=subprocess.PIPE,
             encoding="utf-8",

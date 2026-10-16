@@ -6,6 +6,7 @@ from .gitutils import (
     all_staged_changes,
     create_commit,
     setup_branches,
+    setup_worktree,
     stage_changes,
 )
 
@@ -113,4 +114,30 @@ async def test_no_update_when_branch_has_additional_commits() -> None:
     assert all_branches() == {
         "main": commit_c,
         "my_pr": commit_e,
+    }
+
+
+async def test_skip_rebased_pr_branch_in_other_worktree() -> None:
+    # Given an open PR rebased onto main on GitHub, checked out in another worktree
+    commit_a = create_commit("main", file="A\n")
+    commit_b = create_commit(commit_a, file="B\n")
+    commit_c = create_commit(commit_a, other="C\n")
+    commit_d = create_commit(commit_c, file="B\n")
+    setup_branches(main=commit_c, my_pr=commit_b, active_branch="main")
+    setup_worktree("other_worktree", "my_pr")
+    pr = PullRequest(
+        branch_name="my_pr",
+        repo_urls=frozenset([REPO_URL]),
+        hashes=(commit_d,),
+        merged_hash=None,
+        superseded_heads=frozenset([commit_b]),
+    )
+
+    # When we update rebased PRs
+    await update_rebased_prs(REPO_URL, [pr])
+
+    # Then the PR branch is left alone
+    assert all_branches() == {
+        "main": commit_c,
+        "my_pr": commit_b,
     }

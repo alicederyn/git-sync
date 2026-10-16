@@ -1,16 +1,18 @@
+import os
 from asyncio.subprocess import DEVNULL, PIPE, create_subprocess_exec
 from collections.abc import Iterable
 from dataclasses import dataclass
+from pathlib import Path
 
 from .github import PullRequest
 
-_ExecArg = bytes | str
+_ExecArg = bytes | str | Path
 
 
 class GitError(Exception):
     def __init__(self, args: Iterable[_ExecArg], returncode: int) -> None:
         def tostr(arg: _ExecArg) -> str:
-            return arg if isinstance(arg, str) else arg.decode(errors="replace")
+            return arg.decode(errors="replace") if isinstance(arg, bytes) else str(arg)
 
         super().__init__(
             f"""git {" ".join(tostr(a) for a in args)} failed (code {returncode})"""
@@ -111,7 +113,13 @@ async def fetch_and_fast_forward_to_upstream(branches: Iterable[Branch]) -> None
         await git("pull", "--all")
     else:
         await git("fetch", "--all")
-    fetch_args = [b.upstream + b":" + b.name for b in branches if not b.is_current]
+    locked_branches = await get_branches_locked_by_worktrees()
+    fetch_args = [
+        b.upstream + b":" + b.name
+        for b in branches
+        if not b.is_current
+        and b.name.removeprefix(b"refs/heads/") not in locked_branches
+    ]
     if fetch_args:
         # Ignore return code as fetch will exit with a non-zero code if any
         # branch cannot be fast-forwarded, which is not a failing state for
@@ -172,6 +180,93 @@ async def get_current_branch_name() -> bytes | None:
     return current_branch and current_branch[11:]
 
 
+@dataclass
+class Worktree:
+    path: Path
+    branch: bytes | None
+    is_detached: bool
+    is_prunable: bool
+
+
+async def get_worktrees() -> list[Worktree]:
+    raw_bytes = await git_output("worktree", "list", "--porcelain", "-z")
+    worktrees = []
+    for record in raw_bytes.split(b"\0\0"):
+        # partition, not split, as some attributes (e.g. "detached") have no value
+        attributes = {
+            key: value
+            for key, _, value in (
+                attribute.partition(b" ") for attribute in record.split(b"\0")
+            )
+        }
+        if b"worktree" not in attributes:
+            continue
+        branch = attributes.get(b"branch")
+        worktrees.append(
+            Worktree(
+                path=Path(os.fsdecode(attributes[b"worktree"])),
+                branch=branch and branch.removeprefix(b"refs/heads/"),
+                is_detached=b"detached" in attributes,
+                is_prunable=b"prunable" in attributes,
+            )
+        )
+    return worktrees
+
+
+def read_state_file(path: Path) -> bytes | None:
+    try:
+        return path.read_bytes().strip()
+    except FileNotFoundError:
+        return None
+
+
+def read_rebased_branch(head_name_path: Path) -> bytes | None:
+    ref = read_state_file(head_name_path)
+    if ref and ref.startswith(b"refs/heads/"):
+        return ref.removeprefix(b"refs/heads/")
+    return None
+
+
+async def get_branches_being_rebased_or_bisected(worktree_path: Path) -> set[bytes]:
+    # Same state files as git's contrib/completion/git-prompt.sh
+    state_file_paths = await git_output(
+        "-C",
+        worktree_path,
+        "rev-parse",
+        "--path-format=absolute",
+        "--git-path",
+        "rebase-merge/head-name",
+        "--git-path",
+        "rebase-apply/head-name",
+        "--git-path",
+        "BISECT_START",
+    )
+    rebase_merge, rebase_apply, bisect_start = (
+        Path(os.fsdecode(path)) for path in state_file_paths.splitlines()
+    )
+    branches = {
+        read_rebased_branch(rebase_merge),
+        read_rebased_branch(rebase_apply),
+        read_state_file(bisect_start),
+    }
+    return {branch for branch in branches if branch}
+
+
+async def get_branches_locked_by_worktrees() -> set[bytes]:
+    """Return branches that git refuses to update, except the current branch."""
+    locked_branches: set[bytes] = set()
+    for worktree in await get_worktrees():
+        if worktree.branch:
+            locked_branches.add(worktree.branch)
+        elif worktree.is_detached and not worktree.is_prunable:
+            locked_branches |= await get_branches_being_rebased_or_bisected(
+                worktree.path
+            )
+    if current_branch := await get_current_branch_name():
+        locked_branches.discard(current_branch)
+    return locked_branches
+
+
 async def update_merged_pr_branch(
     branch_name: bytes,
     merged_hash: str,
@@ -188,7 +283,10 @@ async def update_merged_pr_branch(
             return
         if allow_delete and not await branch_is_an_upstream(branch_name):
             upstream = (await get_upstream_branch(branch_name)) or b"main"
-            await git("checkout", upstream)
+            if upstream in await get_branches_locked_by_worktrees():
+                await git("checkout", "--detach", upstream)
+            else:
+                await git("checkout", upstream)
             await git("branch", "-D", branch_name)
         else:
             await git("reset", "--hard", merged_hash)
@@ -204,12 +302,14 @@ async def update_merged_prs(
     push_remote_url: str, prs: Iterable[PullRequest], *, allow_delete: bool = True
 ) -> None:
     branch_hashes = await get_branch_hashes()
+    locked_branches = await get_branches_locked_by_worktrees()
     for pr in prs:
         branch_name = pr.branch_name.encode("utf-8")
         merged_hash = pr.merged_hash
         if (
             merged_hash
             and branch_name in branch_hashes
+            and branch_name not in locked_branches
             and (
                 branch_hashes[branch_name] in pr.hashes
                 or branch_hashes[branch_name] in pr.superseded_heads
@@ -284,11 +384,13 @@ async def update_rebased_pr_branch(branch_name: bytes, head_hash: str) -> None:
 
 async def update_rebased_prs(push_remote_url: str, prs: Iterable[PullRequest]) -> None:
     branch_hashes = await get_branch_hashes()
+    locked_branches = await get_branches_locked_by_worktrees()
     for pr in prs:
         branch_name = pr.branch_name.encode("utf-8")
         if (
             pr.hashes
             and branch_name in branch_hashes
+            and branch_name not in locked_branches
             and branch_hashes[branch_name] in pr.superseded_heads
             and push_remote_url in pr.repo_urls
         ):
