@@ -116,6 +116,12 @@ def setup_remote(name: str, **branches: str) -> None:
     subprocess.run(["git", "fetch", "-q", name], check=True)
 
 
+def delete_remote_branch(name: str, branch_name: str) -> None:
+    """Delete a branch from a remote, and prune its remote-tracking branch."""
+    subprocess.run(["git", "push", "-q", name, "--delete", branch_name], check=True)
+    subprocess.run(["git", "fetch", "-q", "--prune", name], check=True)
+
+
 def remote_branches(name: str) -> dict[str, str]:
     lines = run_split_stdout(
         ["git", "ls-remote", "--heads", name],
