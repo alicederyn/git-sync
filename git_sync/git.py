@@ -76,12 +76,16 @@ async def get_branch_hashes() -> dict[bytes, str]:
 async def get_branches_with_remote_upstreams() -> list[Branch]:
     current_branch = await get_current_branch()
     raw_bytes = await git_output(
-        "for-each-ref", "--format=%(refname) %(upstream)", "refs/heads"
+        "for-each-ref",
+        "--format=%(refname) %(upstream) %(upstream:track,nobracket)",
+        "refs/heads",
     )
     return [
         Branch(name=name, upstream=upstream, is_current=(name == current_branch))
-        for name, upstream in (line.split(b" ") for line in raw_bytes.splitlines())
-        if upstream.startswith(b"refs/remotes/")
+        for name, upstream, track in (
+            line.split(b" ", maxsplit=2) for line in raw_bytes.splitlines()
+        )
+        if upstream.startswith(b"refs/remotes/") and track != b"gone"
     ]
 
 
