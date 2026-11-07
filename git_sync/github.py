@@ -281,6 +281,7 @@ async def fetch_pull_requests_from_domain(
             endpoint=endpoint,
             headers={"Authorization": f"Bearer {token}"},
             session=session,
+            validate=False,
         )
 
         queries = [pr_query(repo.owner, repo.name) for repo in repos]

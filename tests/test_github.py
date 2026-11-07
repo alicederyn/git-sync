@@ -196,6 +196,7 @@ async def test_public_github_endpoint(
         endpoint="https://api.github.com/graphql",
         headers={"Authorization": "Bearer test-token"},
         session=client_session,
+        validate=False,
     )
 
 
@@ -211,6 +212,7 @@ async def test_github_enterprise_endpoint(
         endpoint="https://github.example.com/api/graphql",
         headers={"Authorization": "Bearer test-token"},
         session=client_session,
+        validate=False,
     )
 
 
